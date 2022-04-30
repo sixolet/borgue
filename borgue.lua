@@ -14,7 +14,7 @@
 -- K1+K3: Reverse
 
 music = require 'musicutil'
-include('lib/passencorn')
+include('borgue/lib/passencorn')
 
 
 engine.name = "CyborgFugue"
@@ -28,6 +28,12 @@ scaleSet = {}
 activePitchClasses = {}
 sungNote = nil
 rootDegree = nil;
+
+function partial2(f, arg1)
+  return function(arg2)
+    f(arg1, arg2)
+  end
+end
 
 function set_scale()
   scale = music.generate_scale(params:get("root") % 12, scale_name(), 10)
@@ -124,6 +130,9 @@ function change_input_mix()
   _menu.rebuild_params()
 end
 
+AMPSPEC = controlspec.AMP:copy()
+AMPSPEC.default = 0.5
+
 function init()
   osc.event = osc_in
   screen_redraw_clock = clock.run(
@@ -160,14 +169,22 @@ function init()
   params:add_control("low", "in range low", lowspec)
   params:add_control("high", "in range high", highspec)
   
+  -- Set up voice 0
+  engine.setDegreeMult(0, 1)
+  engine.setDegreeAdd(0, 0)
+  clock.run(function ()
+    clock.sleep(0.1)
+    engine.setDelay(0, 0)
+  end)
+  
+  params:add_separator("lead")
+  params:add_control("lead amp", "lead amp", AMPSPEC)
+  params:set_action("lead amp", function (amp) engine.setAmp(0, amp) end)
+  params:add_control("lead pan", "lead pan", controlspec.PAN)
+  params:set_action("lead pan", function (pan) engine.setPan(0, pan) end)
+
   for i=1,3,1 do
-    params:add_group("voice ".. i, 0)
-    -- delay
-    -- extent; 0 to delay
-    -- speed
-    -- transpose
-    -- invert
-    
+    add_voice_params(i)
   end
   
   params:add_separator("source")
@@ -180,6 +197,34 @@ function init()
 
   params:read()
   params:bang()
+end
+
+function add_voice_params(i)
+  params:add_separator("voice ".. i)
+  params:add_control("delay "..i, "delay "..i, controlspec.new(0.5, 16, 'exp', 0, i, "beats"))
+  params:set_action("delay "..i, function(delay)
+    engine.setDelay(i, delay)
+  end)
+  params:add_control("amp " ..i, "amp "..i, AMPSPEC)
+  params:set_action("amp "..i, function(amp)
+    engine.setAmp(i, amp)
+  end)
+  params:add_control("pan "..i, "pan "..i, controlspec.PAN)
+  params:set_action("pan "..i, function(pan)
+    engine.setPan(i, pan)
+  end)
+  params:add_number("add "..i, "add "..i, -28, 28, i*2)
+  params:set_action("add "..i, function(add)
+      engine.setDegreeAdd(i, add)
+  end) 
+  params:add_binary("invert "..i, "invert "..i, "toggle", 0)
+  params:set_action("invert "..i, function(invert)
+    if invert == 0 then
+      engine.setDegreeMult(i, 1)
+    else
+      engine.setDegreeMult(i, -1)
+    end
+  end)  
 end
 
 

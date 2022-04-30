@@ -30,8 +30,36 @@ CyborgFugeVoice {
     this.replaceReader;
   }
   
+  amp_ { |a|
+    amp = a;
+    if (reader != nil, {
+      reader.set(\amp, a);
+    });
+  }
+  
+  pan_ { |p|
+    pan = p;
+    if (reader != nil, {
+      reader.set(\pan, p);
+    });
+  }
+  
+  degreeMult_ { |d|
+    degreeMult = d;
+    if (reader != nil, {
+      reader.set(\degreeMult, d);
+    });
+  }
+  
+  degreeAdd_ { |d|
+    degreeAdd = d;
+    if (reader != nil, {
+      reader.set(\degreeAdd, d);
+    });
+  }  
+  
   replaceReader {
-    Server.default.makeBundle(0.1, {
+    Server.default.makeBundle(TempoClock.beats2secs(0.1), {
       // first end the old reader
       if (reader != nil, {
         reader.set(\gate, 0);
@@ -115,6 +143,7 @@ Engine_CyborgFugue : CroneEngine {
 	  
 
   alloc {
+    var group;
   	var luaOscAddr = NetAddr("localhost", luaOscPort);
   	var scale = FloatArray[0, 2, 3.2, 5, 7, 9, 10];
   	scaleBuffer = Buffer.alloc(Server.default, scale.size, 1, {|b| b.setnMsg(0, scale) });
@@ -151,7 +180,52 @@ Engine_CyborgFugue : CroneEngine {
 		  array.postln;
 		  scaleBuffer.numFrames = array.size;
 		  scaleBuffer.alloc({|b| b.setnMsg(0, array)});
+		  voices.do { |v|
+		    v.root = root;
+		  };
 		});
+		
+		this.addCommand("setDelay", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var delay = msg[2].asFloat;
+		  voices[voice].delay = delay;
+		});
+		
+		this.addCommand("setAmp", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var amp = msg[2].asFloat;
+		  voices[voice].amp = amp;
+		});
+		
+		this.addCommand("setPan", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var pan = msg[2].asFloat;
+		  voices[voice].pan = pan;
+		});
+		
+		this.addCommand("setDegreeMult", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var degreeMult = msg[2].asFloat;
+		  voices[voice].degreeMult = degreeMult;
+		});
+		
+		this.addCommand("setDegreeAdd", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var degreeAdd = msg[2].asFloat;
+		  voices[voice].degreeAdd = degreeAdd;
+		});
+
+		this.addCommand("setPeriod", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var period = msg[2].asFloat;
+		  voices[voice].period = period;
+		});
+		
+		this.addCommand("setRate", "if", { |msg|
+		  var voice = msg[1].asInteger;
+		  var rate = msg[2].asFloat;
+		  voices[voice].rate = rate;
+		});				
 		
 		this.addCommand("setInputRange", "ff", { |msg|
 		  var low = msg[1].asFloat;
@@ -184,8 +258,7 @@ Engine_CyborgFugue : CroneEngine {
 		});
 		
   
-    Routine.new({
-      var group;
+    //Routine.new({
       infoBus = Bus.control(numChannels: 2);
       degreeBus = Bus.control(numChannels: 1);
       backgroundBus = Bus.audio(numChannels:2);
@@ -246,7 +319,7 @@ Engine_CyborgFugue : CroneEngine {
         var phasor = In.ar(phasorBus, numChannels: 1) - (delay*SampleRate.ir);
         var delayPhasorRate = rate - 1;
         // Reset the delay phasor when we unfreeze.
-        var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate);
+        var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate, doneAction: Done.freeSelf);
         // var delayPhasor = Phasor.ar(0, delayPhasorRate, 0, (delayPhasorRate > 0).if(1, -1)*40*SampleRate.ir);
         // phasor = phasor + delayPhasor - (delay*SampleRate.ir);
         //Poll.kr(Impulse.kr(1), phasor, "phase");
@@ -267,17 +340,17 @@ Engine_CyborgFugue : CroneEngine {
         sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, 2, 0.01);
         //Poll.kr(Impulse.kr(1), sound, "sound");
         sound = amp*Pan2.ar(sound, pan);
-        Out.ar(out, sound);
+        Out.ar(out, envelope*sound);
       }).add;
       
-      Server.default.sync;
+      //Server.default.sync;
       // This runs the whole time.
       pitchFinderSynth = Synth(\follower, [infoBus: infoBus, voiceInBus: voiceInBus, backgroundBus: backgroundBus, inL: 0.5, inR: 0.5, backL: 0, backR: 0, backPan: 0]);
       group = Group.after(pitchFinderSynth);
       voices = 4.collect({CyborgFugeVoice.new(group, voiceInBus, infoBus, degreeBus, scaleBuffer)});
       endOfChainSynth = Synth.after(group, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
 
-    }).play;
+    //}).play;
   }
   
   free {
