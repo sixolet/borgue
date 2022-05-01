@@ -196,7 +196,11 @@ function init()
   params:set_action("background pan", change_input_mix)
 
   params:read()
-  params:bang()
+  clock.run(function() 
+    clock.sleep(0.1)
+    params:bang()
+  end)
+  clock.run(sync_every_beat)
 end
 
 function add_voice_params(i)
@@ -227,6 +231,15 @@ function add_voice_params(i)
   end)  
 end
 
+function sync_every_beat()
+  while true do
+    clock.sync(1)
+    b = clock.get_beats()
+    t = clock.get_tempo()
+    -- print("Beat", b)
+    engine.tempo_sync(b, (t/60.0) - 0.1)
+  end
+end
 
 function osc_in(path, args, from)
 

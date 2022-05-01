@@ -1,8 +1,8 @@
 CyborgFugeVoice {
-  var group, voiceInBus, infoBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, routine, phasorBus; 
+  var group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, routine, phasorBus; 
   var root, <>period, <>rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
   
-  *new { |group, voiceInBus, infoBus, degreeBus, scaleBuf|
+  *new { |group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
     var sampleRate = Server.default.sampleRate;
     var controlRate = sampleRate/Server.default.options.blockSize;
     var soundBuf = Buffer.alloc(Server.default, sampleRate*40, 1);
@@ -12,7 +12,7 @@ CyborgFugeVoice {
     var phasorBus = Bus.audio(numChannels: 1);
       
     var ret = super.newCopyArgs(
-      group, voiceInBus, infoBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, phasorBus, 
+      group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, phasorBus, 
       60, 1, 1, 1, 1, 0, 1, 0);
     ret.init;
     ^ret;
@@ -68,6 +68,7 @@ CyborgFugeVoice {
       "making reader".postln;
       reader = Synth(\reader, [
         out: outBus,
+        beatDurBus: beatDurBus,
         phasorBus: phasorBus,
         soundBuffer: soundBuf,
         infoBuffer: infoBuf,
@@ -133,7 +134,7 @@ CyborgFugeVoice {
 Engine_CyborgFugue : CroneEngine {
 	classvar luaOscPort = 10111;
 
-  var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, endOfChainSynth, scaleBuffer;
+  var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, endOfChainSynth, scaleBuffer, beatDurBus;
   var inL, inR, backL, backR, backPan;
   
 	*new { arg context, doneCallback;
@@ -147,12 +148,30 @@ Engine_CyborgFugue : CroneEngine {
   	var luaOscAddr = NetAddr("localhost", luaOscPort);
   	var scale = FloatArray[0, 2, 3.2, 5, 7, 9, 10];
   	scaleBuffer = Buffer.alloc(Server.default, scale.size, 1, {|b| b.setnMsg(0, scale) });
+  	beatDurBus = Bus.control(numChannels: 1);
+  	beatDurBus.set(1/TempoClock.tempo);
 
 	  pitchHandler == OSCdef.new(\pitchHandler, { |msg, time|
 			var pitch = msg[3].asFloat;
 
 			luaOscAddr.sendMsg("/measuredPitch", pitch);
 		}, '/tr');
+		
+		this.addCommand("tempo_sync", "ff", { arg msg;
+			var beats = msg[1].asFloat;
+			var tempo = msg[2].asFloat;
+			var beatDifference = beats - TempoClock.default.beats;
+			var nudge = beatDifference % 4;
+			if (nudge > 2, {nudge = nudge - 4});
+			if ( (tempo != TempoClock.default.tempo) || (nudge.abs > 1), {
+				TempoClock.default.beats = TempoClock.default.beats + nudge;
+				TempoClock.default.tempo = tempo;
+			}, {
+				TempoClock.default.beats = TempoClock.default.beats + (0.05 * nudge);
+			});
+			// Set M to be the duration of a beat.
+			beatDurBus.set(1/tempo);
+		});
 		
 		this.addCommand("setMix", "fffff", { |msg|
 		  var inL = msg[1].asFloat;
@@ -313,10 +332,11 @@ Engine_CyborgFugue : CroneEngine {
         
       }).add;
       
-      SynthDef(\reader, { |out, phasorBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
+      SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
                            delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0|
         var controlPhasor, hz, note, degree, sound;
-        var phasor = In.ar(phasorBus, numChannels: 1) - (delay*SampleRate.ir);
+        var beatDur = In.kr(beatDurBus);
+        var phasor = In.ar(phasorBus, numChannels: 1) - (delay*beatDur*SampleRate.ir);
         var delayPhasorRate = rate - 1;
         // Reset the delay phasor when we unfreeze.
         var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate, doneAction: Done.freeSelf);
@@ -347,7 +367,7 @@ Engine_CyborgFugue : CroneEngine {
       // This runs the whole time.
       pitchFinderSynth = Synth(\follower, [infoBus: infoBus, voiceInBus: voiceInBus, backgroundBus: backgroundBus, inL: 0.5, inR: 0.5, backL: 0, backR: 0, backPan: 0]);
       group = Group.after(pitchFinderSynth);
-      voices = 4.collect({CyborgFugeVoice.new(group, voiceInBus, infoBus, degreeBus, scaleBuffer)});
+      voices = 4.collect({CyborgFugeVoice.new(group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)});
       endOfChainSynth = Synth.after(group, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
 
     //}).play;
@@ -364,5 +384,6 @@ Engine_CyborgFugue : CroneEngine {
     backgroundBus.free;
     degreeBus.free;
     voiceInBus.free;
+    beatDurBus.free;
   }
 }

@@ -1,5 +1,5 @@
 PSOLABufRead {
-	*ar { |sampleBuf, pitchBuf, phase, rate, targetPitch, formantRatio, periodsPerGrain = 2, timeDispersion|
+	*ar { |sampleBuf, pitchBuf, phase, rate, targetPitch, formantRatio, periodsPerGrain = 3, timeDispersion|
 
 		var out, grainDur, wavePeriod, trigger, grainFreq, grainPos;
 		var absolutelyMinValue = 0.01; // used to ensure positive values before reciprocating
