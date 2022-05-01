@@ -59,14 +59,15 @@ CyborgFugeVoice {
   }  
   
   replaceReader {
-    Server.default.makeBundle(TempoClock.beats2secs(0.1), {
+    var replacement;
+    var old = reader;
+    Server.default.makeBundle(0.1/TempoClock.tempo, {
       // first end the old reader
       if (reader != nil, {
-        reader.set(\gate, 0);
+        old.set(\gate, 0);
       });
       // then start a new one
-      "making reader".postln;
-      reader = Synth(\reader, [
+      replacement = Synth(\reader, [
         out: outBus,
         beatDurBus: beatDurBus,
         phasorBus: phasorBus,
@@ -83,7 +84,9 @@ CyborgFugeVoice {
         amp: amp,
         pan: pan,
       ], addAction: \addAfter, target: recorder);
-    });  
+      // ("made " ++ replacement.nodeID).postln;
+    });
+    reader = replacement;
   }
 
   init {
@@ -100,14 +103,18 @@ CyborgFugeVoice {
         freeze: 0, 
         phasorBus: phasorBus], addAction: \addToHead, target: group);
       loop {
-        var nextActivation = TempoClock.timeToNextBeat(period) - 0.1;
-        if (nextActivation <= 0, { nextActivation = 0.05});
+        var nextActivation;
+        Server.default.sync;
+        nextActivation = TempoClock.timeToNextBeat(period) - 0.1;
+        if (nextActivation <= 0, { 
+          "ooops".postln;
+          nextActivation = 0.05
+        });
         nextActivation.wait;
         // We want to replace the reader if:
         // * It's nil
         // * Rate is not 1
         // * We have changed the delay time
-        // "cycle".postln;
         if ( (reader == nil) || (rate != 1) || (delay != lastDelayTime), {
           this.replaceReader;
         });
@@ -332,16 +339,21 @@ Engine_CyborgFugue : CroneEngine {
         
       }).add;
       
+      SynthDef(\repeater, { |out, inBus, beatDurBus, repeatTime, feedback, rotate|
+        var in = inBus.ar(inBus, numChannels: 2);
+        Out.ar(out, PingPong.ar(LocalBuf.new(4*SampleRate.ir, 2), in, In.kr(beatDurBus)*repeatTime, feedback, rotate));
+      }).add;
+      
       SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
                            delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0|
         var controlPhasor, hz, note, degree, sound;
         var beatDur = In.kr(beatDurBus);
-        var phasor = In.ar(phasorBus, numChannels: 1) - (delay*beatDur*SampleRate.ir);
+        var phasor = In.ar(phasorBus, numChannels: 1);
         var delayPhasorRate = rate - 1;
         // Reset the delay phasor when we unfreeze.
         var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate, doneAction: Done.freeSelf);
-        // var delayPhasor = Phasor.ar(0, delayPhasorRate, 0, (delayPhasorRate > 0).if(1, -1)*40*SampleRate.ir);
-        // phasor = phasor + delayPhasor - (delay*SampleRate.ir);
+        var delayPhasor = Phasor.ar(0, delayPhasorRate, 0, (delayPhasorRate > 0).if(1, -1)*40*SampleRate.ir);
+        phasor = phasor + delayPhasor - (delay*beatDur*SampleRate.ir);
         //Poll.kr(Impulse.kr(1), phasor, "phase");
 
         phasor = phasor.wrap(0, BufFrames.kr(soundBuffer));

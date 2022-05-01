@@ -160,7 +160,7 @@ function init()
   params:add_option("scale", "scale", SCALE_NAMES, 1)
   params:set_action("scale", set_scale)
   hysteresis_spec = controlspec.UNIPOLAR:copy()
-  hysteresis_spec.default = 0.5
+  hysteresis_spec.default = 0.2
   params:add_control("hysteresis", "hysteresis", hysteresis_spec)
   local lowspec = controlspec.FREQ:copy()
   lowspec.default = 82
@@ -197,7 +197,7 @@ function init()
 
   params:read()
   clock.run(function() 
-    clock.sleep(0.1)
+    clock.sleep(0.5)
     params:bang()
   end)
   clock.run(sync_every_beat)
@@ -205,10 +205,19 @@ end
 
 function add_voice_params(i)
   params:add_separator("voice ".. i)
-  params:add_control("delay "..i, "delay "..i, controlspec.new(0.5, 16, 'exp', 0, i, "beats"))
+  params:add_binary("snap ".. i, "snap "..i, "toggle", 1)
+  params:add_control("delay "..i, "delay "..i, controlspec.new(0, 16, 'lin', 0, i, "beats", 1/64), function(param) return actual_delay(i) end)
+  params:add_control("rate "..i, "rate "..i, controlspec.new(-4, 4, 'lin', 0, 1, "", 1/32), function(param) return actual_rate(i) end)
+  params:add_control("period "..i, "period "..i, controlspec.new(1/8, 16, 'lin', 0, i, "", 1/127), function(param) return actual_period(i) end)
   params:set_action("delay "..i, function(delay)
-    engine.setDelay(i, delay)
+    recalculate_times(i)
   end)
+  params:set_action("rate "..i, function(delay)
+    recalculate_times(i)
+  end)
+  params:set_action("period "..i, function(delay)
+    recalculate_times(i)
+  end)  
   params:add_control("amp " ..i, "amp "..i, AMPSPEC)
   params:set_action("amp "..i, function(amp)
     engine.setAmp(i, amp)
@@ -240,6 +249,78 @@ function sync_every_beat()
     engine.tempo_sync(b, (t/60.0) - 0.1)
   end
 end
+
+DELAY_TIMES = {0, 1/8, 1/4, 1/3, 3/8, 1/2, 2/3, 3/4, 1, 3/2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+RATES = {-4, -3, -2, -3/2, -1, -3/4, -2/3, -1/2, -1/3, -1/4, 0, 1/4, 1/3, 1/2, 2/3, 3/4, 1, 2, 3, 4}
+
+function actual_delay(i)
+  local d = params:get("delay "..i)
+  local snap = params:get("snap "..i)
+  if snap > 0 then
+    local pos = find(DELAY_TIMES, d)
+    return DELAY_TIMES[pos]
+  end
+  return d
+end
+
+function actual_rate(i)
+  local d = actual_delay(i)
+  if d < 1 then -- Disallow hanky-panky with really short delays.
+    return 1
+  end
+  local r = params:get("rate "..i)
+  if params:get("snap "..i) > 0 then
+    r = RATES[find(RATES, r)]
+  end
+  return r
+end
+
+function actual_period(i)
+  local rel_rate = actual_rate(i) - 1
+  local p = params:get("period "..i)
+  local d = actual_delay(i)
+  local s = actual_smoothing(i)
+  if rel_rate == 0 then
+    return p
+  end
+  if params:get("snap "..i) > 0 then
+    p = DELAY_TIMES[find(DELAY_TIMES, p)]
+  end
+  if rel_rate > 0 and p > d/(2*rel_rate) then
+    p = d/(2*rel_rate)
+  end
+  while rel_rate < 0 and p > (-40*clock.get_tempo() + d)/(2*rel_rate) do
+    p = p/2
+  end
+  return p
+end
+
+function actual_smoothing(i)
+  return 0.2
+end
+
+last_actual_delay = {}
+last_actual_rate = {}
+last_actual_period = {}
+
+function recalculate_times(i)
+  local r = actual_rate(i)
+  if r ~= last_actual_rate[i] then
+    last_actual_rate[i] = r
+    engine.setRate(i, r)
+  end
+  local p = actual_period(i)
+  if p ~= last_actual_period[i] then
+    last_actual_period[i] = p
+    engine.setPeriod(i, p)
+  end
+  local d = actual_delay(i)
+  if d ~= last_actual_delay[i] then
+    last_actual_delay[i] = d
+    engine.setDelay(i, d)
+  end  
+end
+
 
 function osc_in(path, args, from)
 
