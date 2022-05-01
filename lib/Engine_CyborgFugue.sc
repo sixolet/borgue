@@ -339,10 +339,10 @@ Engine_CyborgFugue : CroneEngine {
         
       }).add;
       
-      SynthDef(\repeater, { |out, inBus, beatDurBus, repeatTime, feedback, rotate|
-        var in = inBus.ar(inBus, numChannels: 2);
-        Out.ar(out, PingPong.ar(LocalBuf.new(4*SampleRate.ir, 2), in, In.kr(beatDurBus)*repeatTime, feedback, rotate));
-      }).add;
+      // SynthDef(\repeater, { |out, inBus, beatDurBus, repeatTime, feedback, rotate|
+      //  var in = In.ar(inBus, numChannels: 2);
+      //  Out.ar(out, PingPong.ar(LocalBuf.new(4*SampleRate.ir, 2), in, In.kr(beatDurBus)*repeatTime, feedback, rotate));
+      // }).add;
       
       SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
                            delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0|
