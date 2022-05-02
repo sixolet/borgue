@@ -1,6 +1,7 @@
 CyborgFugeVoice {
-  var group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, routine, phasorBus; 
+  var group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
   var root, <>period, <>rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
+  var <repeatTime, <repeatFeedback, <repeatRotate;
   
   *new { |group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
     var sampleRate = Server.default.sampleRate;
@@ -10,13 +11,35 @@ CyborgFugeVoice {
     var degreeBuf = Buffer.alloc(Server.default, (controlRate*40)+1, 1);
     var outBus = Bus.audio(numChannels: 2);
     var phasorBus = Bus.audio(numChannels: 1);
+    var delayBus = Bus.audio(numChannels: 2);
       
     var ret = super.newCopyArgs(
-      group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, phasorBus, 
-      60, 1, 1, 1, 1, 0, 1, 0);
+      group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
+      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0);
     ret.init;
     ^ret;
   }
+  
+  repeatTime_ { |t|
+    repeatTime = t;
+    if (repeater != nil, {
+      repeater.set(\repeatTime, t);
+    });
+  }
+  
+  repeatFeedback_ { |f|
+    repeatFeedback = f;
+    if (repeater != nil, {
+      repeater.set(\feedback, f);
+    });
+  }
+  
+  repeatRotate_ { |r|
+    repeatRotate = r;
+    if (repeater != nil, {
+      repeater.set(\rotate, r);
+    });
+  }    
   
   root_ { |r|
     root = r;
@@ -68,7 +91,7 @@ CyborgFugeVoice {
       });
       // then start a new one
       replacement = Synth(\reader, [
-        out: outBus,
+        out: delayBus,
         beatDurBus: beatDurBus,
         phasorBus: phasorBus,
         soundBuffer: soundBuf,
@@ -102,6 +125,17 @@ CyborgFugeVoice {
         degreeBuffer: degreeBuf,
         freeze: 0, 
         phasorBus: phasorBus], addAction: \addToHead, target: group);
+      Server.default.sync;
+      repeater = Synth.tail(group, \repeater, [
+        out: outBus, 
+        inBus: delayBus, 
+        beatDurBus: beatDurBus, 
+        repeatTime: repeatTime, 
+        feedback: repeatFeedback,
+        rotate: repeatRotate,
+      ]);
+      Server.default.sync;
+      this.replaceReader;
       loop {
         var nextActivation;
         Server.default.sync;
@@ -133,6 +167,7 @@ CyborgFugeVoice {
     infoBuf.free;
     phasorBus.free;
     outBus.free;
+    delayBus.free;
   }
 }
 
@@ -247,6 +282,16 @@ Engine_CyborgFugue : CroneEngine {
 		  voices[voice].period = period;
 		});
 		
+		this.addCommand("setSecondaryDelay", "ifff", {|msg|
+		  var voice = msg[1].asInteger;
+		  var repeatTime = msg[2].asFloat;
+		  var repeatFeedback = msg[3].asFloat;
+		  var repeatRotate = msg[4].asFloat;
+		  voices[voice].repeatTime = repeatTime;
+		  voices[voice].repeatFeedback = repeatFeedback;
+		  voices[voice].repeatRotate = repeatRotate;
+		});
+		
 		this.addCommand("setRate", "if", { |msg|
 		  var voice = msg[1].asInteger;
 		  var rate = msg[2].asFloat;
@@ -339,10 +384,11 @@ Engine_CyborgFugue : CroneEngine {
         
       }).add;
       
-      // SynthDef(\repeater, { |out, inBus, beatDurBus, repeatTime, feedback, rotate|
-      //  var in = In.ar(inBus, numChannels: 2);
-      //  Out.ar(out, PingPong.ar(LocalBuf.new(4*SampleRate.ir, 2), in, In.kr(beatDurBus)*repeatTime, feedback, rotate));
-      // }).add;
+      SynthDef(\repeater, { |out, inBus, beatDurBus, repeatTime, feedback=0, rotate=0|
+        var sound = In.ar(inBus, numChannels: 2);
+        var time = repeatTime*In.kr(beatDurBus);
+        Out.ar(out, sound + (feedback*PingPong.ar(LocalBuf.new(2*SampleRate.ir, 2), sound, delayTime: time, feedback: feedback)));
+      }).add;
       
       SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
                            delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0|

@@ -8,7 +8,7 @@
 -- E3: Delay
 -- K2: Invert
 -- K3: Freeze
--- K1+E2: Amp
+-- K1+E2: Ampx
 -- K1+E3: Extent
 -- K1+K2: Mute
 -- K1+K3: Reverse
