@@ -7,11 +7,12 @@
 -- E2: Transpose
 -- E3: Delay
 -- K2: Invert
--- K3: Freeze
--- K1+E2: Ampx
--- K1+E3: Extent
--- K1+K2: Mute
--- K1+K3: Reverse
+-- K3: Freeze (to be implemented)
+-- K1+E1: Rate
+-- K1+E2: Amp
+-- K1+E3: Period (for rate not 1)
+-- K1+K2: Mute (to be implemented)
+-- K1+K3: TBD
 
 music = require 'musicutil'
 include('borgue/lib/passencorn')
@@ -29,10 +30,33 @@ voiceNotes = {}
 sungNote = nil
 rootDegree = nil;
 
-function partial2(f, arg1)
-  return function(arg2)
-    f(arg1, arg2)
+k1 = 0
+active = 1
+
+function key(n,z)
+  if n == 1 then
+    k1 = z
+  elseif z == 1 and n == 2 and k1 == 0 then
+    params:set("invert "..active, 1 - params:get("invert "..active))
   end
+    
+end
+
+function enc(n,d)
+  if n == 1 and k1 == 0 then
+    active = util.wrap(active + d, 1, 3)
+  elseif n == 2 and k1 == 0 then
+    params:set("add "..active, params:get("add "..active) + d)
+  elseif n == 3 and k1 == 0 then
+    params:set("delay "..active, params:get("delay "..active) + d/8)
+  elseif n == 1 and k1 == 1 then
+    params:set("rate "..active, params:get("rate "..active) + d/4)
+  elseif n == 2 and k1 == 1 then
+    params:set("amp "..active, params:get("amp "..active) + d/25)
+  elseif n == 3 and k1 == 1 then
+    params:set("period "..active, params:get("period "..active) + d/4)    
+  end
+  screen_dirty = true  
 end
 
 function set_scale()
@@ -55,11 +79,11 @@ function scale_name()
   return SCALE_NAMES[params:get("scale")]
 end
 
-function polygon(x, y, radius, sides)
+function polygon(x, y, radius, sides, fill)
   for i=1,sides,1 do
-    angle = i*(2*math.pi/sides)
-    xx = x - radius*math.sin(angle)
-    yy = y + radius*math.cos(angle)
+    local angle = i*(2*math.pi/sides)
+    local xx = x - radius*math.sin(angle)
+    local yy = y + radius*math.cos(angle)
     if i == 1 then
       screen.move(xx, yy)
     else
@@ -67,12 +91,43 @@ function polygon(x, y, radius, sides)
     end
   end
   screen.close()
+  if fill then
+    screen.fill()
+  end
+  screen.stroke()
+end
+
+MID_X = 83
+MID_Y = 32
+
+function describe_chan(i)
+  local xx = 5
+  local yy = 3+(i-1)*21
+  polygon(xx, yy, 4, i+2, active == i)
+  local offset = params:get("add "..i)
+  local pitch = string.format("%+i", offset)
+  if params:get("invert "..i) > 0 then 
+    pitch = pitch .. " inv"
+  end
+  screen.move(xx + 6, yy + 4)
+  screen.text(pitch)
+  screen.stroke()
+  local time = string.format("d%.1f", actual_delay(i))
+  local rate = actual_rate(i)
+  if rate ~= 1 then
+    time = time .. string.format(":%.1f!%.1f", rate, actual_period(i))
+  end
+  screen.move(xx-3, yy+11)
+  screen.text(time)
   screen.stroke()
 end
 
 function redraw()
   screen.clear()
   screen.aa(1)
+  for i=1,3,1 do
+    describe_chan(i)
+  end
   local x, y
   for i=0,11,1 do
     if scaleSet[i] ~= nil then
@@ -80,24 +135,24 @@ function redraw()
     else
       screen.level(0)
     end
-    x = 64 - 35*math.sin(2 * math.pi * (i/12))
-    y = 32 + 25*math.cos(2 * math.pi * (i/12))
+    x = MID_X - 35*math.sin(2 * math.pi * (i/12))
+    y = MID_Y + 25*math.cos(2 * math.pi * (i/12))
     screen.circle(x, y, 2)
     screen.fill()
     if sungNote ~= nil and sungNote % 12 == i then
-      screen.move(64, 32)
+      screen.move(MID_X, MID_Y)
       screen.line(x, y)
       screen.stroke()
     end
   end
   screen.level(8)
   local count = 0
-  for v=0,3,1 do
+  for v=1,3,1 do
     if voiceNotes[v] ~= nil then
       local i = voiceNotes[v] % 12
-      x = 64 - 35*math.sin(2 * math.pi * (i/12))
-      y = 32 + 25*math.cos(2 * math.pi * (i/12))
-      polygon(x, y, 5, v+3)
+      x = MID_X - 35*math.sin(2 * math.pi * (i/12))
+      y = MID_Y + 25*math.cos(2 * math.pi * (i/12))
+      polygon(x, y, 10*params:get("amp ".. v), v+2)
     end
   end
   if count > 1 then
@@ -109,10 +164,10 @@ function redraw()
   end
   if unquantizedSungNote ~= nil then
     local i = unquantizedSungNote % 12
-    local x = 64 - 10*math.sin(2 * math.pi * (i/12))
-    local y = 32 + 7*math.cos(2 * math.pi * (i/12))
+    local x = MID_X - 10*math.sin(2 * math.pi * (i/12))
+    local y = MID_Y + 7*math.cos(2 * math.pi * (i/12))
     screen.level(8)
-    screen.move(64, 32)
+    screen.move(MID_X, MID_Y)
     screen.line(x, y)
     screen.stroke()
   end
@@ -147,7 +202,7 @@ function init()
   screen_redraw_clock = clock.run(
     function()
       while true do
-        clock.sleep(1/15) 
+        clock.sleep(1/10) 
         if screen_dirty == true then
           redraw()
           screen_dirty = false
@@ -356,6 +411,7 @@ function osc_in(path, args, from)
     local voice = args[1]
     local note = args[2]
     voiceNotes[voice] = note
+    screen_dirty = true
   elseif path == "/measuredPitch" then
     local pitch = args[1]
     -- print(pitch)

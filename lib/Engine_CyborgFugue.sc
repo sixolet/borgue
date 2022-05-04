@@ -187,6 +187,7 @@ CyborgFugeVoice {
     reader.free;
     soundBuf.free;
     degreeBuf.free;
+    repeater.free;
     infoBuf.free;
     phasorBus.free;
     outBus.free;
