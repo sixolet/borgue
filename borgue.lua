@@ -25,7 +25,7 @@ end
 
 scale = nil
 scaleSet = {}
-activePitchClasses = {}
+voiceNotes = {}
 sungNote = nil
 rootDegree = nil;
 
@@ -55,7 +55,20 @@ function scale_name()
   return SCALE_NAMES[params:get("scale")]
 end
 
-
+function polygon(x, y, radius, sides)
+  for i=1,sides,1 do
+    angle = i*(2*math.pi/sides)
+    xx = x - radius*math.sin(angle)
+    yy = y + radius*math.cos(angle)
+    if i == 1 then
+      screen.move(xx, yy)
+    else
+      screen.line(xx, yy)
+    end
+  end
+  screen.close()
+  screen.stroke()
+end
 
 function redraw()
   screen.clear()
@@ -79,16 +92,12 @@ function redraw()
   end
   screen.level(8)
   local count = 0
-  for i=0,11,1 do
-    if activePitchClasses[i] == true then
+  for v=0,3,1 do
+    if voiceNotes[v] ~= nil then
+      local i = voiceNotes[v] % 12
       x = 64 - 35*math.sin(2 * math.pi * (i/12))
       y = 32 + 25*math.cos(2 * math.pi * (i/12))
-      if count == 0 then
-        screen.move(x, y)
-      else
-        screen.line(x, y)
-      end
-      count = count + 1
+      polygon(x, y, 5, v+3)
     end
   end
   if count > 1 then
@@ -208,7 +217,7 @@ function add_voice_params(i)
   params:add_binary("snap ".. i, "snap "..i, "toggle", 1)
   params:add_control("delay "..i, "delay "..i, controlspec.new(0, 16, 'lin', 0, i, "beats", 1/64), function(param) return actual_delay(i) end)
   params:add_control("rate "..i, "rate "..i, controlspec.new(-4, 4, 'lin', 0, 1, "", 1/32), function(param) return actual_rate(i) end)
-  params:add_control("period "..i, "period "..i, controlspec.new(1/8, 16, 'lin', 0, i, "", 1/127), function(param) return actual_period(i) end)
+  params:add_control("period "..i, "period "..i, controlspec.new(1/8, 16, 'lin', 0, 1, "", 1/127), function(param) return actual_period(i) end)
   params:set_action("delay "..i, function(delay)
     recalculate_times(i)
   end)
@@ -217,7 +226,12 @@ function add_voice_params(i)
   end)
   params:set_action("period "..i, function(delay)
     recalculate_times(i)
-  end)  
+  end)
+  params:add_control("repeat time "..i, "repeat time "..i, controlspec.new(1/16, 2, 'lin', 0, 1, "beats", 1/31), function(param) return actual_repeat_time(i) end)
+  params:add_control("repeat amount "..i, "repeat amount "..i, controlspec.UNIPOLAR)
+  params:set_action("repeat time "..i, function () recalculate_repeats(i) end)
+  params:set_action("repeat amount "..i, function () recalculate_repeats(i) end)  
+  
   params:add_control("amp " ..i, "amp "..i, AMPSPEC)
   params:set_action("amp "..i, function(amp)
     engine.setAmp(i, amp)
@@ -237,7 +251,7 @@ function add_voice_params(i)
     else
       engine.setDegreeMult(i, -1)
     end
-  end)  
+  end)
 end
 
 function sync_every_beat()
@@ -256,6 +270,16 @@ RATES = {-4, -3, -2, -3/2, -1, -3/4, -2/3, -1/2, -1/3, -1/4, 0, 1/4, 1/3, 1/2, 2
 function actual_delay(i)
   local d = params:get("delay "..i)
   local snap = params:get("snap "..i)
+  if snap > 0 then
+    local pos = find(DELAY_TIMES, d)
+    return DELAY_TIMES[pos]
+  end
+  return d
+end
+
+function actual_repeat_time(i)
+  local d = params:get("repeat time ".. i)
+  local snap = params:get("snap ".. i)
   if snap > 0 then
     local pos = find(DELAY_TIMES, d)
     return DELAY_TIMES[pos]
@@ -321,10 +345,18 @@ function recalculate_times(i)
   end  
 end
 
+function recalculate_repeats(i)
+  local t = actual_repeat_time(i)
+  local f = params:get("repeat amount "..i)
+  engine.setSecondaryDelay(i, t, f, 1)
+end
 
 function osc_in(path, args, from)
-
-  if path == "/measuredPitch" then
+  if path == "/note" then
+    local voice = args[1]
+    local note = args[2]
+    voiceNotes[voice] = note
+  elseif path == "/measuredPitch" then
     local pitch = args[1]
     -- print(pitch)
     unquantizedSungNote = freq_to_note_num_float(pitch)
@@ -340,7 +372,7 @@ function osc_in(path, args, from)
         sungNote = newNote
         local degree = scaleDegree(scale, sungNote)
         engine.scaleDegree(degree - rootDegree)
-        print("degree", degree, "pitch", pitch, "sungNote", sungNote, "degree diff", degree - rootDegree)
+        -- print("degree", degree, "pitch", pitch, "sungNote", sungNote, "degree diff", degree - rootDegree)
       end
     end
   end

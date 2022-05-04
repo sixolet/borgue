@@ -1,9 +1,10 @@
 CyborgFugeVoice {
-  var group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
+  var id, group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
   var root, <>period, <>rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
   var <repeatTime, <repeatFeedback, <repeatRotate;
+  var condition;
   
-  *new { |group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
+  *new { |id, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
     var sampleRate = Server.default.sampleRate;
     var controlRate = sampleRate/Server.default.options.blockSize;
     var soundBuf = Buffer.alloc(Server.default, sampleRate*40, 1);
@@ -14,8 +15,8 @@ CyborgFugeVoice {
     var delayBus = Bus.audio(numChannels: 2);
       
     var ret = super.newCopyArgs(
-      group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
-      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0);
+      id, group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
+      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, Condition(true));
     ret.init;
     ^ret;
   }
@@ -41,10 +42,13 @@ CyborgFugeVoice {
     });
   }    
   
-  root_ { |r|
-    root = r;
+  root_ { |rr|
+    root = rr;
     if (reader != nil, {
-      reader.set(\scaleRoot, r);
+      r {
+        condition.wait;
+        reader.set(\scaleRoot, rr);
+      }.play;
     });
   }
   
@@ -56,60 +60,79 @@ CyborgFugeVoice {
   amp_ { |a|
     amp = a;
     if (reader != nil, {
-      reader.set(\amp, a);
+      r {
+        condition.wait;
+        reader.set(\amp, a);
+      }.play;
     });
   }
   
   pan_ { |p|
     pan = p;
     if (reader != nil, {
-      reader.set(\pan, p);
+      r {
+        condition.wait;
+        reader.set(\pan, p);
+      }.play;
     });
   }
   
   degreeMult_ { |d|
     degreeMult = d;
     if (reader != nil, {
-      reader.set(\degreeMult, d);
+      r {
+        condition.wait;
+        reader.set(\degreeMult, d);
+      }.play;
     });
   }
   
   degreeAdd_ { |d|
     degreeAdd = d;
     if (reader != nil, {
-      reader.set(\degreeAdd, d);
+      r {
+        condition.wait;
+        reader.set(\degreeAdd, d);
+      }.play;
     });
   }  
   
   replaceReader {
     var replacement;
     var old = reader;
-    Server.default.makeBundle(0.1/TempoClock.tempo, {
-      // first end the old reader
-      if (reader != nil, {
-        old.set(\gate, 0);
+    r {
+      condition.wait;
+      condition.test = false;
+      Server.default.makeBundle(0.1/TempoClock.tempo, {
+        // first end the old reader
+        if (reader != nil, {
+          old.set(\gate, 0);
+        });
+        // then start a new one
+        replacement = Synth(\reader, [
+          out: delayBus,
+          beatDurBus: beatDurBus,
+          phasorBus: phasorBus,
+          soundBuffer: soundBuf,
+          infoBuffer: infoBuf,
+          degreeBuffer: degreeBuf,
+          degreeMult: degreeMult,
+          degreeAdd: degreeAdd,
+          scaleBuffer: scaleBuf,
+          scaleRoot: root,
+          rate: rate,
+          formantRatio: 1,
+          delay: delay,
+          amp: amp,
+          pan: pan,
+          id: id,
+        ], addAction: \addAfter, target: recorder);
+        // ("made " ++ replacement.nodeID).postln;
       });
-      // then start a new one
-      replacement = Synth(\reader, [
-        out: delayBus,
-        beatDurBus: beatDurBus,
-        phasorBus: phasorBus,
-        soundBuffer: soundBuf,
-        infoBuffer: infoBuf,
-        degreeBuffer: degreeBuf,
-        degreeMult: degreeMult,
-        degreeAdd: degreeAdd,
-        scaleBuffer: scaleBuf,
-        scaleRoot: root,
-        rate: rate,
-        formantRatio: 1,
-        delay: delay,
-        amp: amp,
-        pan: pan,
-      ], addAction: \addAfter, target: recorder);
-      // ("made " ++ replacement.nodeID).postln;
-    });
-    reader = replacement;
+      reader = replacement;
+      Server.default.sync;
+      condition.test = true;
+    }.play;
   }
 
   init {
@@ -176,7 +199,7 @@ CyborgFugeVoice {
 Engine_CyborgFugue : CroneEngine {
 	classvar luaOscPort = 10111;
 
-  var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, endOfChainSynth, scaleBuffer, beatDurBus;
+  var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, noteHandler, endOfChainSynth, scaleBuffer, beatDurBus;
   var inL, inR, backL, backR, backPan;
   
 	*new { arg context, doneCallback;
@@ -193,11 +216,16 @@ Engine_CyborgFugue : CroneEngine {
   	beatDurBus = Bus.control(numChannels: 1);
   	beatDurBus.set(1/TempoClock.tempo);
 
-	  pitchHandler == OSCdef.new(\pitchHandler, { |msg, time|
+	  pitchHandler = OSCdef.new(\pitchHandler, { |msg, time|
 			var pitch = msg[3].asFloat;
-
 			luaOscAddr.sendMsg("/measuredPitch", pitch);
 		}, '/tr');
+		
+	  noteHandler = OSCdef.new(\noteHandler, { |msg, time|
+			var note = msg[3].asFloat;
+			var voice = msg[4].asFloat.asInteger;
+			luaOscAddr.sendMsg("/note", voice, note);
+		}, '/note');		
 		
 		this.addCommand("tempo_sync", "ff", { arg msg;
 			var beats = msg[1].asFloat;
@@ -391,7 +419,7 @@ Engine_CyborgFugue : CroneEngine {
       }).add;
       
       SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
-                           delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0|
+                           delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0, id=0|
         var controlPhasor, hz, note, degree, sound;
         var beatDur = In.kr(beatDurBus);
         var phasor = In.ar(phasorBus, numChannels: 1);
@@ -409,9 +437,11 @@ Engine_CyborgFugue : CroneEngine {
         degree = BufRd.kr(1, degreeBuffer, controlPhasor);
         //Poll.kr(Impulse.kr(1), degree, "degree");
         // Poll.kr(Impulse.kr(1), controlPhasor, "controlPhase");
-        degree = (degreeMult * degree) + degreeAdd;
-        //Poll.kr(Impulse.kr(1), BufFrames.kr(scaleBuffer), "scale len");
-        note = scaleRoot + DegreeToKey.kr(scaleBuffer, degree, 12) + (vibratoAmount*SinOsc.kr(vibratoSpeed));
+        degree = ((degreeMult * degree) + degreeAdd).round(1);
+        //Poll.kr(Impulse.kr(1) * (id <= 0), degree, "degree");
+        note = scaleRoot + DegreeToKey.kr(scaleBuffer, degree, 12);
+        SendReply.kr(Changed.kr(note, 0.2)*gate, '/note', [note, id]); 
+        note = note + (vibratoAmount*SinOsc.kr(vibratoSpeed));
         //Poll.kr(Impulse.kr(1), note, "note");
         hz = note.midicps;
         //Poll.kr(Impulse.kr(1), hz, "hz");
@@ -425,7 +455,9 @@ Engine_CyborgFugue : CroneEngine {
       // This runs the whole time.
       pitchFinderSynth = Synth(\follower, [infoBus: infoBus, voiceInBus: voiceInBus, backgroundBus: backgroundBus, inL: 0.5, inR: 0.5, backL: 0, backR: 0, backPan: 0]);
       group = Group.after(pitchFinderSynth);
-      voices = 4.collect({CyborgFugeVoice.new(group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)});
+      voices = 4.collect({ |i| 
+        CyborgFugeVoice.new(i, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)
+      });
       endOfChainSynth = Synth.after(group, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
 
     //}).play;
@@ -438,6 +470,7 @@ Engine_CyborgFugue : CroneEngine {
     pitchFinderSynth.free;
     infoBus.free;
     pitchHandler.free;
+    noteHandler.free;
     endOfChainSynth.free;
     backgroundBus.free;
     degreeBus.free;
