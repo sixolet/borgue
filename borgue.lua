@@ -315,7 +315,7 @@ function sync_every_beat()
     b = clock.get_beats()
     t = clock.get_tempo()
     -- print("Beat", b)
-    engine.tempo_sync(b, (t/60.0) - 0.1)
+    engine.tempo_sync(b - 0.1, (t/60.0))
   end
 end
 

@@ -1,6 +1,6 @@
 CyborgFugeVoice {
   var id, group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
-  var root, <>period, <>rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
+  var root, <>period, <rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
   var <repeatTime, <repeatFeedback, <repeatRotate;
   var condition;
   
@@ -19,6 +19,13 @@ CyborgFugeVoice {
       60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, Condition(true));
     ret.init;
     ^ret;
+  }
+  
+  rate_ { |r|
+    rate = r;
+    if(rate == 1, {
+      this.replaceReader;
+    });
   }
   
   repeatTime_ { |t|
@@ -365,7 +372,7 @@ Engine_CyborgFugue : CroneEngine {
       voiceInBus = Bus.audio(numChannels: 1);
       
       SynthDef(\endOfChain, { |a, b, c, d|
-        var mix = Mix.ar([a, b, c, d].collect({ |v|
+        var mix = Mix.ar([a, b, c, d, backgroundBus].collect({ |v|
           In.ar(v, 2)
         }));
         voices.size.postln;
