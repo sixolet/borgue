@@ -7,7 +7,7 @@
 -- E2: Transpose
 -- E3: Delay
 -- K2: Invert
--- K3: Freeze (to be implemented)
+-- K3: Freeze
 -- K1+E1: Rate
 -- K1+E2: Amp
 -- K1+E3: Period (for rate not 1)
@@ -38,6 +38,10 @@ function key(n,z)
     k1 = z
   elseif z == 1 and n == 2 and k1 == 0 then
     params:set("invert "..active, 1 - params:get("invert "..active))
+  elseif z == 1 and n == 3 and k1 == 0 then
+    params:set("freeze "..active, 1 - params:get("freeze "..active))
+  elseif z == 1 and n == 2 and k1 == 1 then
+    params:set("mute "..active, 1 - params:get("mute "..active))   
   end
     
 end
@@ -285,12 +289,17 @@ function add_voice_params(i)
   params:add_control("repeat time "..i, "repeat time "..i, controlspec.new(1/16, 2, 'lin', 0, 1, "beats", 1/31), function(param) return actual_repeat_time(i) end)
   params:add_control("repeat amount "..i, "repeat amount "..i, controlspec.UNIPOLAR)
   params:set_action("repeat time "..i, function () recalculate_repeats(i) end)
-  params:set_action("repeat amount "..i, function () recalculate_repeats(i) end)  
+  params:set_action("repeat amount "..i, function () recalculate_repeats(i) end)
+  params:add_binary("freeze "..i, "freeze "..i, "toggle", 0)
+  params:set_action("freeze "..i, function(freeze) engine.freeze(i, freeze) end);
   
   params:add_control("amp " ..i, "amp "..i, AMPSPEC)
   params:set_action("amp "..i, function(amp)
-    engine.setAmp(i, amp)
+    amp_action(i)
   end)
+  params:add_binary("mute "..i, "mute "..i, "toggle", 0)
+  params:set_action("mute "..i, function() amp_action(i) end)
+  
   params:add_control("pan "..i, "pan "..i, controlspec.PAN)
   params:set_action("pan "..i, function(pan)
     engine.setPan(i, pan)
@@ -307,6 +316,12 @@ function add_voice_params(i)
       engine.setDegreeMult(i, -1)
     end
   end)
+end
+
+function amp_action(i)
+  local amp = params:get("amp "..i)
+  local at_all = 1 - params:get("mute "..i)
+  engine.setAmp(i, amp*at_all)
 end
 
 function sync_every_beat()
