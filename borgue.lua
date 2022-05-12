@@ -3,15 +3,17 @@
 --
 -- Cyborg Fugue
 --
+-- scale-locked pitch-shift delay looper quartet
+--
 -- E1: Select voice
 -- E2: Transpose
 -- E3: Delay
--- K2: Invert
+-- K2: Invert Pitch
 -- K3: Freeze
 -- K1+E1: Rate
 -- K1+E2: Amp
 -- K1+E3: Period (for rate not 1)
--- K1+K2: Mute (to be implemented)
+-- K1+K2: Mute
 -- K1+K3: TBD
 
 music = require 'musicutil'
