@@ -1,5 +1,5 @@
 PSOLABufRead {
-	*ar { |sampleBuf, pitchBuf, phase, rate, targetPitch, formantRatio, periodsPerGrain = 2, timeDispersion|
+	*ar { |sampleBuf, pitchBuf, phase, rate, targetPitch, formantRatio, formantRatioTrack=0.15, periodsPerGrain = 2, timeDispersion, speed=0.05|
 
 		var out, grainDur, wavePeriod, trigger, grainFreq, grainPos;
 		var absolutelyMinValue = 0.01; // used to ensure positive values before reciprocating
@@ -8,17 +8,18 @@ PSOLABufRead {
 		var pitchInfo = BufRd.kr(2, pitchBuf, pitchPhase);
 		var freq = pitchInfo[0];
 		var hasFreq = pitchInfo[1];
+		var pitchRatio = (targetPitch/freq).lag(speed);
 		freq = freq.max(minFreq);
+		grainFreq = pitchRatio*freq;
 		grainDur = periodsPerGrain * freq.reciprocal;
 		if (formantRatio.isNil, {
 			formantRatio = 1
 		});
-		formantRatio = formantRatio.clip(0.1, 10);
+		formantRatio = formantRatio.clip(0.1, 10); //  (formantRatio*(pitchRatio**formantRatioTrack)).clip(0.1, 10);
 		grainPos = (phase - Phasor.ar(0, rate, 0, freq.reciprocal * SampleRate.ir));
 		grainPos = grainPos - (SampleRate.ir*grainDur*(formantRatio - 1).max(0));
 		grainPos = grainPos.wrap(0, BufFrames.kr(sampleBuf));
 
-		grainFreq = targetPitch;//Select.kr(hasFreq.lag(0.05), [freq, targetPitch]);
 
 		if(timeDispersion.isNil, {
 			trigger = Impulse.ar(grainFreq);

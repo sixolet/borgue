@@ -441,7 +441,7 @@ Engine_CyborgFugue : CroneEngine {
       }).add;
       
       SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
-                           delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0, id=0|
+                           delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, formantRatioTrack=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0, id=0|
         var controlPhasor, hz, note, degree, sound;
         var beatDur = In.kr(beatDurBus);
         var phasor = In.ar(phasorBus, numChannels: 1);
@@ -467,7 +467,7 @@ Engine_CyborgFugue : CroneEngine {
         //Poll.kr(Impulse.kr(1), note, "note");
         hz = note.midicps;
         //Poll.kr(Impulse.kr(1), hz, "hz");
-        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, 2, 0.01);
+        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, 0.15, 2, 0.01, 0.05);
         //Poll.kr(Impulse.kr(1), sound, "sound");
         sound = amp*Pan2.ar(sound, pan);
         Out.ar(out, envelope*sound);
