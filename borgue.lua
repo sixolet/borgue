@@ -240,6 +240,8 @@ function init()
   highspec.default = 1046
   params:add_control("low", "in range low", lowspec)
   params:add_control("high", "in range high", highspec)
+  params:set_action("low", change_range)
+  params:set_action("high", change_range)
   
   -- Set up voice 0
   engine.setDegreeMult(0, 1)
@@ -465,7 +467,7 @@ function osc_in(path, args, from)
     if scale ~= nil then
       local newNote = quantize(scale, pitch, sungNote, params:get("hysteresis"))
       if sungNote ~= newNote then
-        -- print("pitch", pitch, "unquant", unquantizedSungNote, "quant", newNote)
+        print("pitch", pitch, "unquant", unquantizedSungNote, "quant", newNote)
         sungNote = newNote
         local degree = scaleDegree(scale, sungNote)
         engine.scaleDegree(degree - rootDegree)

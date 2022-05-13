@@ -228,6 +228,7 @@ Engine_CyborgFugue : CroneEngine {
 
   var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, noteHandler, endOfChainSynth, scaleBuffer, beatDurBus;
   var inL, inR, backL, backR, backPan;
+  var condition;
   
 	*new { arg context, doneCallback;
     	  
@@ -239,6 +240,12 @@ Engine_CyborgFugue : CroneEngine {
     var group;
   	var luaOscAddr = NetAddr("localhost", luaOscPort);
   	var scale = FloatArray[0, 2, 3.2, 5, 7, 9, 10];
+  	condition = Condition(false);
+  	inL = 1;
+  	inR = 0;
+  	backL = 0;
+  	backR = 1;
+  	backPan = 0;
   	scaleBuffer = Buffer.alloc(Server.default, scale.size, 1, {|b| b.setnMsg(0, scale) });
   	beatDurBus = Bus.control(numChannels: 1);
   	beatDurBus.set(1/TempoClock.tempo);
@@ -271,11 +278,11 @@ Engine_CyborgFugue : CroneEngine {
 		});
 		
 		this.addCommand("setMix", "fffff", { |msg|
-		  var inL = msg[1].asFloat;
-		  var inR = msg[2].asFloat;
-		  var backL = msg[3].asFloat;
-		  var backR = msg[4].asFloat;
-		  var backPan = msg[5].asFloat;
+		  inL = msg[1].asFloat;
+		  inR = msg[2].asFloat;
+		  backL = msg[3].asFloat;
+		  backR = msg[4].asFloat;
+		  backPan = msg[5].asFloat;
 		
 		  if (pitchFinderSynth != nil, {
 		    pitchFinderSynth.set(
@@ -370,14 +377,7 @@ Engine_CyborgFugue : CroneEngine {
 		  var low = msg[1].asFloat;
 		  var high = msg[2].asFloat;
 		  Routine({
-  		  if (pitchFinderSynth != nil, {
-  		    "freeing pitch".postln;
-    		  pitchFinderSynth.free;
-  	  	  pitchFinderSynth = nil;
-    		});
-    		Server.sync;
-    		"starting pitch".postln;
-	  	  pitchFinderSynth = Synth(\follower, [
+		    var args =  [
 	  	    infoBus: infoBus,  
 	  	    voiceInBus: voiceInBus, 
 	  	    backgroundBus: backgroundBus, 
@@ -387,7 +387,18 @@ Engine_CyborgFugue : CroneEngine {
 	  	    backR: backR,
 	  	    backgroundPan: backPan,
 	  	    minFreq:low, 
-	  	    maxFreq:high]);
+	  	    maxFreq:high];
+		    condition.wait;
+		    condition.test = false;
+    		"starting pitch".postln;
+    		args.postln;
+    		pitchFinderSynth.postln;
+    		low.postln;
+    		high.postln;
+	  	  pitchFinderSynth = Synth(\follower, args, addAction: \addReplace, target: pitchFinderSynth);
+	  	  Server.default.sync;
+	  	  condition.test = true;
+	  	  condition.signal;
 	  	}).play;
 		});
 		
@@ -417,9 +428,10 @@ Engine_CyborgFugue : CroneEngine {
         var snd = HPF.ar(Mix.ar([inL, inR]*in), minFreq);
         var background = Mix.ar([backL, backR]*in);
         var reference = LocalIn.kr(1);
-        var info = Pitch.kr(snd, minFreq: minFreq, maxFreq: maxFreq);
+        var info = Pitch.kr(snd, minFreq: minFreq, maxFreq: maxFreq, peakThreshold: 0.5);
         var midi = info[0].cpsmidi;
         var trigger = info[1]*((midi - reference).abs > 0.2);
+        //Poll.kr(Impulse.kr(1), info);
         LocalOut.kr([Latch.kr(midi, trigger)]);
         SendTrig.kr(trigger, 0, info[0]);
         Out.kr(infoBus, info);
@@ -492,15 +504,29 @@ Engine_CyborgFugue : CroneEngine {
         Out.ar(out, envelope*sound);
       }).add;
       
-      //Server.default.sync;
-      // This runs the whole time.
-      pitchFinderSynth = Synth(\follower, [infoBus: infoBus, voiceInBus: voiceInBus, backgroundBus: backgroundBus, inL: 0.5, inR: 0.5, backL: 0, backR: 0, backPan: 0]);
+    //Routine.new({
+
+
+    	"starting pitch the first time".postln;
+	  	pitchFinderSynth = Synth(\follower, [
+	  	  infoBus: infoBus,  
+	  	  voiceInBus: voiceInBus, 
+	  	  backgroundBus: backgroundBus, 
+	  	  inL: inL, 
+	  	  inR: inR,
+	  	  backL: backL,
+	  	  backR: backR,
+	  	  backgroundPan: backPan,
+	  	  minFreq:82, 
+	  	  maxFreq:800]);
+	  	Server.default.sync;
       group = Group.after(pitchFinderSynth);
       voices = 4.collect({ |i| 
         CyborgFugeVoice.new(i, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)
       });
       endOfChainSynth = Synth.after(group, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
-
+	  	condition.test = true;
+	  	condition.signal;      
     //}).play;
   }
   
