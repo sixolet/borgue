@@ -414,7 +414,7 @@ Engine_CyborgFugue : CroneEngine {
       
       SynthDef(\follower, { |infoBus, voiceInBus, backgroundBus, inL, inR, backL, backR, backgroundPan, minFreq=82, maxFreq=1046|
         var in = SoundIn.ar([0, 1]);
-        var snd = Mix.ar([inL, inR]*in);
+        var snd = HPF.ar(Mix.ar([inL, inR]*in), minFreq);
         var background = Mix.ar([backL, backR]*in);
         var reference = LocalIn.kr(1);
         var info = Pitch.kr(snd, minFreq: minFreq, maxFreq: maxFreq);

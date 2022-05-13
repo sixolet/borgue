@@ -197,7 +197,9 @@ function change_input_mix()
     params:show("background pan")    
     engine.setMix(1, 0, 0, params:get("background amp"), params:get("background pan"))
   end
-  _menu.rebuild_params()
+  if _menu.rebuild_params ~= nil then
+    _menu.rebuild_params()
+  end
 end
 
 AMPSPEC = controlspec.AMP:copy()
@@ -247,13 +249,9 @@ function init()
     engine.setDelay(0, 0)
   end)
   
-  params:add_separator("lead")
-  params:add_control("lead amp", "lead amp", AMPSPEC)
-  params:set_action("lead amp", function (amp) engine.setAmp(0, amp) end)
-  params:add_control("lead pan", "lead pan", controlspec.PAN)
-  params:set_action("lead pan", function (pan) engine.setPan(0, pan) end)
-
-  for i=1,3,1 do
+  params:add_separator("voice")
+  
+  for i=0,3,1 do
     add_voice_params(i)
   end
   
@@ -274,53 +272,67 @@ function init()
 end
 
 function add_voice_params(i)
-  params:add_separator("voice ".. i)
-  params:add_binary("snap ".. i, "snap "..i, "toggle", 1)
-  params:add_control("delay "..i, "delay "..i, controlspec.new(0, 16, 'lin', 0, i, "beats", 1/64), function(param) return actual_delay(i) end)
-  params:add_control("rate "..i, "rate "..i, controlspec.new(-4, 4, 'lin', 0, 1, "", 1/32), function(param) return actual_rate(i) end)
-  params:add_control("period "..i, "period "..i, controlspec.new(1/8, 16, 'lin', 0, 1, "", 1/127), function(param) return actual_period(i) end)
-  params:set_action("delay "..i, function(delay)
-    recalculate_times(i)
-  end)
-  params:set_action("rate "..i, function(delay)
-    recalculate_times(i)
-  end)
-  params:set_action("period "..i, function(delay)
-    recalculate_times(i)
-  end)
-  params:add_control("repeat time "..i, "repeat time "..i, controlspec.new(1/16, 2, 'lin', 0, 1, "beats", 1/31), function(param) return actual_repeat_time(i) end)
-  params:add_control("repeat amount "..i, "repeat amount "..i, controlspec.UNIPOLAR)
+  local group_name = "counterpoint "..i
+  local count = 19
+  if i == 0 then
+    group_name = "lead"
+    count = 11
+  end
+  params:add_group(group_name, count)
+  params:add_binary("snap ".. i, "snap", "toggle", 1)
+  if i ~= 0 then
+    params:add_separator("time")
+    params:add_control("delay "..i, "delay", controlspec.new(0, 16, 'lin', 0, i, "beats", 1/64), function(param) return actual_delay(i) end)
+    params:add_control("rate "..i, "rate", controlspec.new(-4, 4, 'lin', 0, 1, "", 1/32), function(param) return actual_rate(i) end)
+    params:add_control("period "..i, "period", controlspec.new(1/8, 16, 'lin', 0, 1, "", 1/127), function(param) return actual_period(i) end)
+    params:set_action("delay "..i, function(delay)
+      recalculate_times(i)
+    end)
+    params:set_action("rate "..i, function(delay)
+      recalculate_times(i)
+    end)
+    params:set_action("period "..i, function(delay)
+      recalculate_times(i)
+    end)
+    params:add_binary("freeze "..i, "freeze", "toggle", 0)
+    params:set_action("freeze "..i, function(freeze) engine.freeze(i, freeze) end);
+
+    params:add_separator("pitch")
+    params:add_number("add "..i, "add", -28, 28, i*2)
+    params:set_action("add "..i, function(add)
+        engine.setDegreeAdd(i, add)
+    end) 
+    params:add_binary("invert "..i, "invert", "toggle", 0)
+    params:set_action("invert "..i, function(invert)
+      if invert == 0 then
+        engine.setDegreeMult(i, 1)
+      else
+        engine.setDegreeMult(i, -1)
+      end
+    end)
+  end
+  params:add_separator("again")
+  params:add_control("repeat time "..i, "repeat time", controlspec.new(1/16, 2, 'lin', 0, 1, "beats", 1/31), function(param) return actual_repeat_time(i) end)
+  params:add_control("repeat amount "..i, "repeat amount", controlspec.UNIPOLAR)
   params:set_action("repeat time "..i, function () recalculate_repeats(i) end)
   params:set_action("repeat amount "..i, function () recalculate_repeats(i) end)
-  params:add_binary("freeze "..i, "freeze "..i, "toggle", 0)
-  params:set_action("freeze "..i, function(freeze) engine.freeze(i, freeze) end);
   
-  params:add_control("amp " ..i, "amp "..i, AMPSPEC)
+  params:add_separator("strength")
+  params:add_control("amp " ..i, "amp", AMPSPEC)
   params:set_action("amp "..i, function(amp)
     amp_action(i)
   end)
-  params:add_binary("mute "..i, "mute "..i, "toggle", 0)
+  params:add_binary("mute "..i, "mute", "toggle", 0)
   params:set_action("mute "..i, function() amp_action(i) end)
   
-  params:add_control("pan "..i, "pan "..i, controlspec.PAN)
+  params:add_control("pan "..i, "pan", controlspec.PAN)
   params:set_action("pan "..i, function(pan)
     engine.setPan(i, pan)
   end)
-  params:add_number("add "..i, "add "..i, -28, 28, i*2)
-  params:set_action("add "..i, function(add)
-      engine.setDegreeAdd(i, add)
-  end) 
-  params:add_binary("invert "..i, "invert "..i, "toggle", 0)
-  params:set_action("invert "..i, function(invert)
-    if invert == 0 then
-      engine.setDegreeMult(i, 1)
-    else
-      engine.setDegreeMult(i, -1)
-    end
-  end)
   
-  params:add_control("formants "..i, "formants "..i, controlspec.new(0.25, 4, 'lin', 0, 1))
-  params:add_control("formant track "..i, "formant track "..i, controlspec.new(-1, 2, 'lin', 0, 0.15))
+  params:add_separator("timbre")
+  params:add_control("formants "..i, "formants", controlspec.new(0.25, 4, 'lin', 0, 1))
+  params:add_control("formant track "..i, "formant track", controlspec.new(-1, 2, 'lin', 0, 0.15))
   params:set_action("formants "..i, function() formant_action(i) end)
   params:set_action("formant track "..i, function() formant_action(i) end)
   
