@@ -2,6 +2,7 @@ CyborgFugeVoice {
   var id, group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
   var root, <>period, <rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
   var <repeatTime, <repeatFeedback, <repeatRotate;
+  var <formantRatio, <formantRatioTrack;
   var condition;
   
   *new { |id, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
@@ -16,7 +17,7 @@ CyborgFugeVoice {
       
     var ret = super.newCopyArgs(
       id, group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
-      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, Condition(true));
+      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0.15, Condition(true));
     ret.init;
     ^ret;
   }
@@ -61,6 +62,17 @@ CyborgFugeVoice {
         reader.set(\scaleRoot, rr);
       }.play;
     });
+  }
+  
+  setFormants { |ratio, track|
+    formantRatio = ratio;
+    formantRatioTrack = track;
+    if (reader != nil, {
+      r {
+        condition.wait;
+        reader.set(\formantRatio, ratio, \formantRatioTrack, track);
+      }.play;
+    });    
   }
   
   delay_ { |d|
@@ -133,7 +145,7 @@ CyborgFugeVoice {
           scaleBuffer: scaleBuf,
           scaleRoot: root,
           rate: rate,
-          formantRatio: 1,
+          formantRatio: formantRatio,
           delay: delay,
           amp: amp,
           pan: pan,
@@ -289,6 +301,13 @@ Engine_CyborgFugue : CroneEngine {
 		  };
 		});
 		
+		this.addCommand("setFormants", "iff", { |msg|
+		  var voice = msg[1].asInteger;
+		  var formantRatio = msg[2].asFloat;
+		  var formantRatioTrack = msg[3].asFloat;
+		  voices[voice].setFormants(formantRatio, formantRatioTrack);
+		});
+		
 		this.addCommand("setDelay", "if", { |msg|
 		  var voice = msg[1].asInteger;
 		  var delay = msg[2].asFloat;
@@ -441,7 +460,7 @@ Engine_CyborgFugue : CroneEngine {
       }).add;
       
       SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
-                           delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, formantRatioTrack=1, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0, id=0|
+                           delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, formantRatioTrack=0.15, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0, id=0|
         var controlPhasor, hz, note, degree, sound;
         var beatDur = In.kr(beatDurBus);
         var phasor = In.ar(phasorBus, numChannels: 1);
@@ -467,7 +486,7 @@ Engine_CyborgFugue : CroneEngine {
         //Poll.kr(Impulse.kr(1), note, "note");
         hz = note.midicps;
         //Poll.kr(Impulse.kr(1), hz, "hz");
-        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, 0.15, 2, 0.01, 0.05);
+        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, formantRatioTrack, 2, 0.01, 0.05);
         //Poll.kr(Impulse.kr(1), sound, "sound");
         sound = amp*Pan2.ar(sound, pan);
         Out.ar(out, envelope*sound);

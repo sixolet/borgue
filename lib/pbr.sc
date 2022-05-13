@@ -9,13 +9,14 @@ PSOLABufRead {
 		var freq = pitchInfo[0];
 		var hasFreq = pitchInfo[1];
 		var pitchRatio = (targetPitch/freq).lag(speed);
+		var secondaryFormantRatio = Sanitize.kr(pitchRatio**formantRatioTrack, 1);
 		freq = freq.max(minFreq);
 		grainFreq = pitchRatio*freq;
 		grainDur = periodsPerGrain * freq.reciprocal;
 		if (formantRatio.isNil, {
 			formantRatio = 1
 		});
-		formantRatio = formantRatio.clip(0.1, 10); //  (formantRatio*(pitchRatio**formantRatioTrack)).clip(0.1, 10);
+		formantRatio = (formantRatio*secondaryFormantRatio).clip(0.1, 10);
 		grainPos = (phase - Phasor.ar(0, rate, 0, freq.reciprocal * SampleRate.ir));
 		grainPos = grainPos - (SampleRate.ir*grainDur*(formantRatio - 1).max(0));
 		grainPos = grainPos.wrap(0, BufFrames.kr(sampleBuf));

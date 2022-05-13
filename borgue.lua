@@ -318,6 +318,18 @@ function add_voice_params(i)
       engine.setDegreeMult(i, -1)
     end
   end)
+  
+  params:add_control("formants "..i, "formants "..i, controlspec.new(0.25, 4, 'lin', 0, 1))
+  params:add_control("formant track "..i, "formant track "..i, controlspec.new(-1, 2, 'lin', 0, 0.15))
+  params:set_action("formants "..i, function() formant_action(i) end)
+  params:set_action("formant track "..i, function() formant_action(i) end)
+  
+end
+
+function formant_action(i)
+  local ratio = params:get("formants "..i)
+  local track = params:get("formant track "..i)
+  engine.setFormants(i, ratio, track)
 end
 
 function amp_action(i)
