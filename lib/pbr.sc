@@ -1,5 +1,5 @@
 PSOLABufRead {
-	*ar { |sampleBuf, pitchBuf, phase, rate, targetPitch, formantRatio, formantRatioTrack=0.15, periodsPerGrain = 2, timeDispersion, speed=0.05|
+	*ar { |sampleBuf, pitchBuf, phase, rate, targetPitch, formantRatio, formantRatioTrack=0.15, periodsPerGrain = 2, timeDispersion, speed=0.05, ratioDeviationMult = 1|
 
 		var out, grainDur, wavePeriod, trigger, grainFreq, grainPos;
 		var absolutelyMinValue = 0.01; // used to ensure positive values before reciprocating
@@ -8,8 +8,11 @@ PSOLABufRead {
 		var pitchInfo = BufRd.kr(2, pitchBuf, pitchPhase);
 		var freq = pitchInfo[0];
 		var hasFreq = pitchInfo[1];
-		var pitchRatio = (targetPitch/freq).lag(speed);
+		var instantPitchRatio = targetPitch/freq;
+		var pitchRatio = (instantPitchRatio).lag(speed);
+		var pitchRatioDeviation = pitchRatio - instantPitchRatio;
 		var secondaryFormantRatio = Sanitize.kr(pitchRatio**formantRatioTrack, 1);
+		pitchRatio = instantPitchRatio + (ratioDeviationMult*pitchRatioDeviation);
 		freq = freq.max(minFreq);
 		grainFreq = pitchRatio*freq;
 		grainDur = periodsPerGrain * freq.reciprocal;

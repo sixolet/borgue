@@ -373,9 +373,11 @@ Engine_CyborgFugue : CroneEngine {
 		  voices[voice].rate = rate;
 		});				
 		
-		this.addCommand("setInputRange", "ff", { |msg|
+		this.addCommand("setInputRange", "fffi", { |msg|
 		  var low = msg[1].asFloat;
 		  var high = msg[2].asFloat;
+		  var peakThreshold = msg[3].asFloat;
+		  var median = msg[4].asInteger;
 		  Routine({
 		    var args =  [
 	  	    infoBus: infoBus,  
@@ -386,15 +388,12 @@ Engine_CyborgFugue : CroneEngine {
 	  	    backL: backL,
 	  	    backR: backR,
 	  	    backgroundPan: backPan,
-	  	    minFreq:low, 
-	  	    maxFreq:high];
+	  	    minFreq: low, 
+	  	    maxFreq: high,
+	  	    peakThreshold: peakThreshold,
+	  	    median: median];
 		    condition.wait;
 		    condition.test = false;
-    		"starting pitch".postln;
-    		args.postln;
-    		pitchFinderSynth.postln;
-    		low.postln;
-    		high.postln;
 	  	  pitchFinderSynth = Synth(\follower, args, addAction: \addReplace, target: pitchFinderSynth);
 	  	  Server.default.sync;
 	  	  condition.test = true;
@@ -423,12 +422,12 @@ Engine_CyborgFugue : CroneEngine {
         Out.ar(0, mix.softclip);
       }).add;
       
-      SynthDef(\follower, { |infoBus, voiceInBus, backgroundBus, inL, inR, backL, backR, backgroundPan, minFreq=82, maxFreq=1046|
+      SynthDef(\follower, { |infoBus, voiceInBus, backgroundBus, inL, inR, backL, backR, backgroundPan, minFreq=82, maxFreq=1046, peakThreshold=0.5, median=5|
         var in = SoundIn.ar([0, 1]);
         var snd = HPF.ar(Mix.ar([inL, inR]*in), minFreq);
         var background = Mix.ar([backL, backR]*in);
         var reference = LocalIn.kr(1);
-        var info = Pitch.kr(snd, minFreq: minFreq, maxFreq: maxFreq, peakThreshold: 0.5);
+        var info = Pitch.kr(snd, minFreq: minFreq, maxFreq: maxFreq, median: median, peakThreshold: peakThreshold);
         var midi = info[0].cpsmidi;
         var trigger = info[1]*((midi - reference).abs > 0.2);
         //Poll.kr(Impulse.kr(1), info);
@@ -476,6 +475,8 @@ Engine_CyborgFugue : CroneEngine {
         var controlPhasor, hz, note, degree, sound;
         var beatDur = In.kr(beatDurBus);
         var phasor = In.ar(phasorBus, numChannels: 1);
+        var origPhasor = phasor;
+        var veryCloseToNow = (origPhasor - phasor).wrap(0, 40*SampleRate.ir) < (0.05*SampleRate.ir);
         var delayPhasorRate = rate - 1;
         // Reset the delay phasor when we unfreeze.
         var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate, doneAction: Done.freeSelf);
@@ -498,7 +499,7 @@ Engine_CyborgFugue : CroneEngine {
         //Poll.kr(Impulse.kr(1), note, "note");
         hz = note.midicps;
         //Poll.kr(Impulse.kr(1), hz, "hz");
-        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, formantRatioTrack, 2, 0.01, 0.05);
+        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, formantRatioTrack, 2, 0.01, 0.08, ratioDeviationMult: degreeMult);
         //Poll.kr(Impulse.kr(1), sound, "sound");
         sound = amp*Pan2.ar(sound, pan);
         Out.ar(out, envelope*sound);

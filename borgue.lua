@@ -184,7 +184,7 @@ function change_range()
   if params:get("high") < 2*params:get("low") then
     params:set("high", 2*params:get("low"))
   end
-  engine.setInputRange(params:get("low"), params:get("high"))
+  engine.setInputRange(params:get("low"), params:get("high"), params:get("overtone reject"), params:get("median"))
 end
 
 function change_input_mix()
@@ -240,8 +240,12 @@ function init()
   highspec.default = 1046
   params:add_control("low", "in range low", lowspec)
   params:add_control("high", "in range high", highspec)
+  params:add_control("overtone reject", "overtone reject", controlspec.new(0, 1, 'lin', 0, 0.5))
+  params:add_number("median", "pitch smoothing", 1, 10, 3)
   params:set_action("low", change_range)
   params:set_action("high", change_range)
+  params:set_action("overtone reject", change_range)
+  params:set_action("median", change_range)
   
   -- Set up voice 0
   engine.setDegreeMult(0, 1)
@@ -467,7 +471,7 @@ function osc_in(path, args, from)
     if scale ~= nil then
       local newNote = quantize(scale, pitch, sungNote, params:get("hysteresis"))
       if sungNote ~= newNote then
-        print("pitch", pitch, "unquant", unquantizedSungNote, "quant", newNote)
+        -- print("pitch", pitch, "unquant", unquantizedSungNote, "quant", newNote)
         sungNote = newNote
         local degree = scaleDegree(scale, sungNote)
         engine.scaleDegree(degree - rootDegree)
