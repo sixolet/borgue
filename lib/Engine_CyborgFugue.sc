@@ -499,10 +499,10 @@ Engine_CyborgFugue : CroneEngine {
 
         phasor = phasor.wrap(0, BufFrames.kr(soundBuffer));
         //Poll.kr(Impulse.kr(1), phasor, "phase2");
-        veryCloseToNow =  (delayPhasor - (delay*beatDur*SampleRate.ir)) < ((pitchLatency*SampleRate.ir) + 0.004);
+        veryCloseToNow =  (delayPhasor - (delay*beatDur*SampleRate.ir)) < ((pitchLatency*SampleRate.ir) + 0.006);
         controlPhasor = phasor*(ControlRate.ir/SampleRate.ir);
         controlPhasor = veryCloseToNow.if(controlPhasor, controlPhasor + (pitchLatency*ControlRate.ir)).wrap(0, BufFrames.kr(infoBuffer));
-        controlPhasor2 = veryCloseToNow.if(controlPhasor, controlPhasor + 0.004).wrap(0, BufFrames.kr(degreeBuffer)); // some ms for round trip time from lua. This is a guess.
+        controlPhasor2 = veryCloseToNow.if(controlPhasor, controlPhasor + 0.006).wrap(0, BufFrames.kr(degreeBuffer)); // some ms for round trip time from lua. This is a guess.
         degree = BufRd.kr(1, degreeBuffer, controlPhasor2);
         //Poll.kr(Impulse.kr(1), degree, "degree");
         // Poll.kr(Impulse.kr(1), controlPhasor, "controlPhase");

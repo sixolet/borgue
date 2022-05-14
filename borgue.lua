@@ -45,7 +45,7 @@ function key(n,z)
   elseif z == 1 and n == 2 and k1 == 1 then
     params:set("mute "..active, 1 - params:get("mute "..active))   
   end
-    
+  screen_dirty = true
 end
 
 function enc(n,d)
@@ -107,9 +107,17 @@ MID_X = 83
 MID_Y = 32
 
 function describe_chan(i)
+  if params:get("mute "..i) > 0 then
+    screen.level(1)
+  else
+    screen.level(8)
+  end  
   local xx = 5
-  local yy = 3+(i-1)*21
+  local yy = 5+(i-1)*21
   polygon(xx, yy, 4, i+2, active == i)
+  if params:get("freeze "..i) > 0 then
+    screen.circle(xx, yy, 5)
+  end
   local offset = params:get("add "..i)
   local pitch = string.format("%+i", offset)
   if params:get("invert "..i) > 0 then 
@@ -151,9 +159,14 @@ function redraw()
       screen.stroke()
     end
   end
-  screen.level(8)
   local count = 0
   for v=1,3,1 do
+    if params:get("mute "..v) > 0 then
+      screen.level(2)
+    else
+      screen.level(8)
+    end
+
     if voiceNotes[v] ~= nil then
       local i = voiceNotes[v] % 12
       x = MID_X - 35*math.sin(2 * math.pi * (i/12))
