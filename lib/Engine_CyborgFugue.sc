@@ -238,7 +238,7 @@ Engine_CyborgFugue : CroneEngine {
 	classvar luaOscPort = 10111;
 
   var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, noteHandler, endOfChainSynth, scaleBuffer, beatDurBus;
-  var inL, inR, backL, backR, backPan;
+  var inL, inR, backL, backR, backPan, group;
   var condition;
   
 	*new { arg context, doneCallback;
@@ -248,7 +248,6 @@ Engine_CyborgFugue : CroneEngine {
 	  
 
   alloc {
-    var group;
   	var luaOscAddr = NetAddr("localhost", luaOscPort);
   	var scale = FloatArray[0, 2, 3.2, 5, 7, 9, 10];
   	condition = Condition(false);
@@ -560,5 +559,6 @@ Engine_CyborgFugue : CroneEngine {
     degreeBus.free;
     voiceInBus.free;
     beatDurBus.free;
+    group.free;
   }
 }
