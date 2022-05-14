@@ -2,7 +2,7 @@ CyborgFugeVoice {
   var id, group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
   var root, <>period, <rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
   var <repeatTime, <repeatFeedback, <repeatRotate;
-  var <formantRatio, <formantRatioTrack;
+  var <formantRatio, <formantRatioTrack, <pitchLatency;
   var condition;
   
   *new { |id, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
@@ -17,7 +17,7 @@ CyborgFugeVoice {
       
     var ret = super.newCopyArgs(
       id, group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
-      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0.15, Condition(true));
+      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0.15, 0.015, Condition(true));
     ret.init;
     ^ret;
   }
@@ -60,6 +60,16 @@ CyborgFugeVoice {
       r {
         condition.wait;
         reader.set(\scaleRoot, rr);
+      }.play;
+    });
+  }
+  
+  pitchLatency_ { |pl|
+    pitchLatency = pl;
+    if (reader != nil, {
+      r {
+        condition.wait;
+        reader.set(\pitchLatency, pl);
       }.play;
     });
   }
@@ -150,6 +160,7 @@ CyborgFugeVoice {
           amp: amp,
           pan: pan,
           id: id,
+          pitchLatency: pitchLatency,
         ], addAction: \addAfter, target: recorder);
         // ("made " ++ replacement.nodeID).postln;
       });
@@ -399,6 +410,9 @@ Engine_CyborgFugue : CroneEngine {
 	  	  condition.test = true;
 	  	  condition.signal;
 	  	}).play;
+	  	voices.do { |v|
+	  	  v.pitchLatency = 100.clip(low, high).reciprocal*(median/2).ceil;
+	  	}
 		});
 		
 		this.addCommand("scaleDegree", "i", { |msg|
@@ -470,13 +484,13 @@ Engine_CyborgFugue : CroneEngine {
         Out.ar(out, sound + (feedback*PingPong.ar(LocalBuf.new(2*SampleRate.ir, 2), sound, delayTime: time, feedback: feedback)));
       }).add;
       
-      SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot,
+      SynthDef(\reader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot, pitchLatency=0.015,
                            delay, gate=1, smoothing=0.2, rate=1, formantRatio=1, formantRatioTrack=0.15, vibratoAmount=0.1, vibratoSpeed=3, amp=1, pan=0, id=0|
-        var controlPhasor, hz, note, degree, sound;
+        var controlPhasor, controlPhasor2, hz, note, degree, sound;
         var beatDur = In.kr(beatDurBus);
         var phasor = In.ar(phasorBus, numChannels: 1);
         var origPhasor = phasor;
-        var veryCloseToNow = (origPhasor - phasor).wrap(0, 40*SampleRate.ir) < (0.05*SampleRate.ir);
+        var veryCloseToNow;
         var delayPhasorRate = rate - 1;
         // Reset the delay phasor when we unfreeze.
         var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate, doneAction: Done.freeSelf);
@@ -486,9 +500,11 @@ Engine_CyborgFugue : CroneEngine {
 
         phasor = phasor.wrap(0, BufFrames.kr(soundBuffer));
         //Poll.kr(Impulse.kr(1), phasor, "phase2");
-        
+        veryCloseToNow =  (delayPhasor - (delay*beatDur*SampleRate.ir)) < ((pitchLatency*SampleRate.ir) + 0.004);
         controlPhasor = phasor*(ControlRate.ir/SampleRate.ir);
-        degree = BufRd.kr(1, degreeBuffer, controlPhasor);
+        controlPhasor = veryCloseToNow.if(controlPhasor, controlPhasor + (pitchLatency*ControlRate.ir)).wrap(0, BufFrames.kr(infoBuffer));
+        controlPhasor2 = veryCloseToNow.if(controlPhasor, controlPhasor + 0.004).wrap(0, BufFrames.kr(degreeBuffer)); // some ms for round trip time from lua. This is a guess.
+        degree = BufRd.kr(1, degreeBuffer, controlPhasor2);
         //Poll.kr(Impulse.kr(1), degree, "degree");
         // Poll.kr(Impulse.kr(1), controlPhasor, "controlPhase");
         degree = ((degreeMult * degree) + degreeAdd).round(1);
@@ -499,7 +515,7 @@ Engine_CyborgFugue : CroneEngine {
         //Poll.kr(Impulse.kr(1), note, "note");
         hz = note.midicps;
         //Poll.kr(Impulse.kr(1), hz, "hz");
-        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, rate, hz, formantRatio, formantRatioTrack, 2, 0.01, 0.08, ratioDeviationMult: degreeMult);
+        sound = PSOLABufRead.ar(soundBuffer, infoBuffer, phasor, controlPhasor, rate, hz, formantRatio, formantRatioTrack, 2, 0.01, 0.04, ratioDeviationMult: degreeMult);
         //Poll.kr(Impulse.kr(1), sound, "sound");
         sound = amp*Pan2.ar(sound, pan);
         Out.ar(out, envelope*sound);
