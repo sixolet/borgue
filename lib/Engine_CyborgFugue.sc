@@ -1,10 +1,11 @@
 CyborgFugeVoice {
-  var id, group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
+  var id, <>style, group, voiceInBus, infoBus, beatDurBus, degreeBus, <outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, recorder, reader, repeater, routine, phasorBus, delayBus; 
   var root, <>period, <rate, <delay, <amp, <pan, <degreeMult, <degreeAdd;
   var <repeatTime, <repeatFeedback, <repeatRotate;
   var <formantRatio, <formantRatioTrack, <pitchLatency;
-  var condition;
-  
+  var <length, <overlap, <scatter, <irregular, <detune;
+  var <condition;
+
   *new { |id, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuf|
     var sampleRate = Server.default.sampleRate;
     var controlRate = sampleRate/Server.default.options.blockSize;
@@ -16,8 +17,10 @@ CyborgFugeVoice {
     var delayBus = Bus.audio(numChannels: 2);
       
     var ret = super.newCopyArgs(
-      id, Group.head(group), voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
-      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0.15, 0.015, Condition(true));
+      id, \reader, Group.head(group), voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
+      60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0.15, 0.015,
+      0.1, 3, 0, 0, 0,
+      Condition(true));
     ret.init;
     ^ret;
   }
@@ -59,6 +62,31 @@ CyborgFugeVoice {
     group.set(\scaleRoot, rr);
   }
   
+  length_ { |x|
+    length = x;
+    group.set(\length, x);
+  }
+  
+  overlap_ { |x|
+    overlap = x;
+    group.set(\overlap, x);
+  }
+  
+  scatter_ { |x|
+    scatter = x;
+    group.set(\scatter, x);
+  }
+  
+  irregular_ { |x|
+    irregular = x;
+    group.set(\irregular, x);
+  }
+  
+  detune_ { |x|
+    detune = x;
+    group.set(\detune, x);
+  }  
+  
   pitchLatency_ { |pl|
     pitchLatency = pl;
     group.set(\pitchLatency, pl);
@@ -68,6 +96,15 @@ CyborgFugeVoice {
     formantRatio = ratio;
     formantRatioTrack = track;
     group.set(\formantRatio, ratio, \formantRatioTrack, track);
+  }
+  
+  setGrainProperties { |l, o, s, i, d|
+    length = l;
+    overlap = o;
+    scatter = s;
+    irregular = i;
+    detune = d;
+    group.set(\length, length, \overlap, overlap, \scatter, scatter, \irregular, irregular, \detune, detune);
   }
   
   delay_ { |d|
@@ -108,7 +145,10 @@ CyborgFugeVoice {
           old.set(\gate, 0);
         });
         // then start a new one
-        replacement = Synth(\reader, [
+        if (style == nil, {
+         "AAAAA".postln;
+        });
+        replacement = Synth(style, [
           out: delayBus,
           beatDurBus: beatDurBus,
           phasorBus: phasorBus,
@@ -126,12 +166,18 @@ CyborgFugeVoice {
           pan: pan,
           id: id,
           pitchLatency: pitchLatency,
+          length: length,
+          overlap: overlap,
+          scatter: scatter,
+          irregular: irregular,
+          detune: detune,
         ], addAction: \addAfter, target: recorder);
         // ("made " ++ replacement.nodeID).postln;
       });
       reader = replacement;
       Server.default.sync;
       condition.test = true;
+      condition.signal;
     }.play;
   }
 
@@ -270,6 +316,17 @@ Engine_CyborgFugue : CroneEngine {
 		  });
 		});
 		
+		this.addCommand("setStyle", "ii", { |msg|
+          var voice = msg[1].asInteger;
+          var style = msg[2].asInteger;
+          var symbol = \reader;
+          if (style == 2, {
+            symbol = \grainReader;
+          });
+          voices[voice].style = symbol;
+          voices[voice].replaceReader;
+        });
+		
 		this.addCommand("setScale", "iiiiiiiiiiiiii", { |msg|
 		  var len = msg[1].asInteger;
 		  var root = msg[2].asInteger;
@@ -290,6 +347,16 @@ Engine_CyborgFugue : CroneEngine {
 		  var formantRatioTrack = msg[3].asFloat;
 		  voices[voice].setFormants(formantRatio, formantRatioTrack);
 		});
+		
+		this.addCommand("setGrainProperties", "ifffff", { |msg|
+		  var voice = msg[1].asInteger;
+		  var length = msg[2].asFloat;
+		  var overlap = msg[3].asFloat;
+		  var scatter = msg[4].asFloat;
+		  var irregular = msg[5].asFloat;	
+		  var detune = msg[6].asFloat;
+		  voices[voice].setGrainProperties(length, overlap, scatter, irregular, detune);
+		});		
 		
 		this.addCommand("setDelay", "if", { |msg|
 		  var voice = msg[1].asInteger;
@@ -386,7 +453,6 @@ Engine_CyborgFugue : CroneEngine {
 		});
 		
   
-    //Routine.new({
       infoBus = Bus.control(numChannels: 2);
       degreeBus = Bus.control(numChannels: 1);
       backgroundBus = Bus.audio(numChannels:2);
@@ -486,11 +552,55 @@ Engine_CyborgFugue : CroneEngine {
         Out.ar(out, envelope*sound);
       }).add;
       
-    //Routine.new({
+      SynthDef(\grainReader, { |out, phasorBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, degreeMult, degreeAdd, scaleBuffer, scaleRoot, pitchLatency=0.015,
+                           delay, gate=1, smoothing=0.2, rate=1, length, overlap, scatter, irregular, detune, amp=1, pan=0, id=0|
+        var controlPhasor, controlPhasor2, hz, note, degree, sound;
+        var beatDur = In.kr(beatDurBus);
+        var phasor = In.ar(phasorBus, numChannels: 1);
+        var origPhasor = phasor;
+        var veryCloseToNow;
+        var delayPhasorRate = rate - 1;
+        var scatterDifference = (scatter*LFNoise0.kr(2*overlap/length).unipolar);
+        // Reset the delay phasor when we unfreeze.
+        var envelope =  EnvGen.kr(Env.asr(attackTime: smoothing, releaseTime: smoothing, curve: 0), gate, doneAction: Done.freeSelf);
+        var delayPhasor = Phasor.ar(0, delayPhasorRate, 0, (delayPhasorRate > 0).if(1, -1)*40*SampleRate.ir);
+        phasor = phasor + delayPhasor - (delay*beatDur*SampleRate.ir) - (scatterDifference*SampleRate.ir);
+        //Poll.kr(Impulse.kr(1), phasor, "phase");
 
-
-    	"starting pitch the first time".postln;
-	  	pitchFinderSynth = Synth(\follower, [
+        phasor = phasor.wrap(0, BufFrames.kr(soundBuffer));
+        //Poll.kr(Impulse.kr(1), phasor, "phase2");
+        veryCloseToNow =  (delayPhasor - (delay*beatDur*SampleRate.ir)) < ((pitchLatency*SampleRate.ir) + 0.006);
+        controlPhasor = phasor*(ControlRate.ir/SampleRate.ir);
+        controlPhasor = veryCloseToNow.if(controlPhasor, controlPhasor + (pitchLatency*ControlRate.ir)).wrap(0, BufFrames.kr(infoBuffer));
+        controlPhasor2 = veryCloseToNow.if(controlPhasor, controlPhasor + 0.006).wrap(0, BufFrames.kr(degreeBuffer)); // some ms for round trip time from lua. This is a guess.
+        degree = BufRd.kr(1, degreeBuffer, controlPhasor2);
+        //Poll.kr(Impulse.kr(1), degree, "degree");
+        // Poll.kr(Impulse.kr(1), controlPhasor, "controlPhase");
+        degree = ((degreeMult * degree) + degreeAdd).round(1);
+        //Poll.kr(Impulse.kr(1) * (id <= 0), degree, "degree");
+        note = scaleRoot + DegreeToKey.kr(scaleBuffer, degree, 12);
+        SendReply.kr(Changed.kr(note, 0.2)*gate, '/note', [note, id]); 
+        //Poll.kr(Impulse.kr(1), note, "note");
+        hz = note.midicps;
+        //Poll.kr(Impulse.kr(1), hz, "hz");
+        sound = PitchedGrainBufRead.ar(
+            sampleBuf: soundBuffer, 
+            pitchBuf: infoBuffer, 
+            phase: phasor, 
+            controlPhase: controlPhasor, 
+            rate: rate, 
+            targetPitch: hz, 
+            length: length, 
+            overlap: overlap, 
+            irregular: irregular, 
+            detune: detune, 
+            ratioDeviationMult: degreeMult);
+        //Poll.kr(Impulse.kr(1), sound, "sound");
+        sound = amp*Pan2.ar(sound, pan);
+        Out.ar(out, envelope*sound);
+      }).add;      
+    
+	  pitchFinderSynth = Synth(\follower, [
 	  	  infoBus: infoBus,  
 	  	  voiceInBus: voiceInBus, 
 	  	  backgroundBus: backgroundBus, 
@@ -501,15 +611,12 @@ Engine_CyborgFugue : CroneEngine {
 	  	  backgroundPan: backPan,
 	  	  minFreq:82, 
 	  	  maxFreq:800]);
-	  	Server.default.sync;
+	  Server.default.sync;
       mainGroup = Group.after(pitchFinderSynth);
       voices = 4.collect({ |i|
         CyborgFugeVoice.new(i, mainGroup, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)
       });
       endOfChainSynth = Synth.after(mainGroup, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
-	  	condition.test = true;
-	  	condition.signal;      
-    //}).play;
   }
   
   free {

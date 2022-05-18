@@ -292,10 +292,10 @@ end
 
 function add_voice_params(i)
   local group_name = "counterpoint "..i
-  local count = 19
+  local count = 25
   if i == 0 then
     group_name = "lead"
-    count = 11
+    count = 17
   end
   params:add_group(group_name, count)
   params:add_binary("snap ".. i, "snap", "toggle", 1)
@@ -350,11 +350,56 @@ function add_voice_params(i)
   end)
   
   params:add_separator("timbre")
+  params:add_option("style "..i, "style", {"tune", "grain"}, 1)
+  params:set_action("style "..i, function(s)
+    engine.setStyle(i, s)
+    if s == 1 then
+        params:hide("length "..i)
+        params:hide("overlap "..i)
+        params:hide("scatter "..i)
+        params:hide("irregular "..i)
+        params:hide("detune "..i)
+        params:show("formants "..i)
+        params:show("formant track "..i)
+    elseif s == 2 then
+        params:show("length "..i)
+        params:show("overlap "..i)
+        params:show("scatter "..i)
+        params:show("irregular "..i)
+        params:show("detune "..i)
+        params:hide("formants "..i)
+        params:hide("formant track "..i)        
+    end
+    if _menu.rebuild_params ~= nil then
+        _menu.rebuild_params()
+    end
+  end)
   params:add_control("formants "..i, "formants", controlspec.new(0.25, 4, 'lin', 0, 1))
   params:add_control("formant track "..i, "formant track", controlspec.new(-1, 2, 'lin', 0, 0.15))
   params:set_action("formants "..i, function() formant_action(i) end)
   params:set_action("formant track "..i, function() formant_action(i) end)
   
+  params:add_control("length "..i, "length", controlspec.new(0.05, 0.5, 'exp', 0, 0.1))
+  params:add_control("overlap "..i, "overlap", controlspec.new(1, 8, 'lin', 0, 3))
+  params:add_control("scatter "..i, "scatter", controlspec.new(0, 2, 'lin', 0, 0))
+  params:add_control("irregular "..i, "irregular", controlspec.new(0, 1, 'lin', 0, 0))
+  params:add_control("detune "..i, "detune", controlspec.new(0, 0.1, 'lin', 0, 0))
+  params:set_action("length "..i, function() grain_action(i) end)
+  params:set_action("overlap "..i, function() grain_action(i) end)
+  params:set_action("scatter "..i, function() grain_action(i) end)
+  params:set_action("irregular "..i, function() grain_action(i) end)
+  params:set_action("detune "..i, function() grain_action(i) end)
+  
+  
+end
+
+function grain_action(i)
+    local length = params:get("length "..i)
+    local overlap = params:get("overlap "..i)
+    local scatter = params:get("scatter "..i)
+    local irregular = params:get("irregular "..i)
+    local detune = params:get("detune "..i)
+    engine.setGrainProperties(i, length, overlap, scatter, irregular, detune)
 end
 
 function formant_action(i)

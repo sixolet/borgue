@@ -2,7 +2,6 @@ PSOLABufRead {
 	*ar { |sampleBuf, pitchBuf, phase, controlPhase, rate, targetPitch, formantRatio, formantRatioTrack=0.15, periodsPerGrain = 2, timeDispersion, speed=0.05, ratioDeviationMult = 1|
 
 		var out, grainDur, wavePeriod, trigger, grainFreq, grainPos;
-		var absolutelyMinValue = 0.01; // used to ensure positive values before reciprocating
 		var minFreq = 10;
 		var pitchPhase = controlPhase;
 		var pitchInfo = BufRd.kr(2, pitchBuf, pitchPhase);
@@ -34,3 +33,24 @@ PSOLABufRead {
 		^out;
 	}
 }
+
+PitchedGrainBufRead {
+	*ar { |sampleBuf, pitchBuf, phase, controlPhase, rate, targetPitch, length, overlap, irregular, detune, ratioDeviationMult = 1|
+
+		var out, grainDur, wavePeriod, trigger, grainFreq, grainPos;
+		var minFreq = 10;
+		var grainTrigs = Impulse.kr(overlap/length, phase: irregular*LFNoise1.kr(overlap/length).unipolar);
+		var pitchPhase = controlPhase;
+		var pitchInfo = BufRd.kr(2, pitchBuf, pitchPhase);
+		var freq = Sanitize.kr(pitchInfo[0], 110);
+		var hasFreq = pitchInfo[1];
+		var pitchRatio = (targetPitch/freq)*(1+(detune*LFNoise0.kr(2*overlap/length)));
+		grainPos = phase;
+		grainPos = grainPos - (SampleRate.ir*length*(pitchRatio - 1).max(0));
+		grainPos = grainPos.wrap(0, BufFrames.kr(sampleBuf));
+
+		out = (2/overlap)*GrainBuf.ar(1, grainTrigs, length, sampleBuf, pitchRatio, (grainPos/BufFrames.kr(sampleBuf)).wrap(0, 1));
+		^out;
+	}
+}
+
