@@ -16,7 +16,7 @@ CyborgFugeVoice {
     var delayBus = Bus.audio(numChannels: 2);
       
     var ret = super.newCopyArgs(
-      id, group, voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
+      id, Group.head(group), voiceInBus, infoBus, beatDurBus, degreeBus, outBus, soundBuf, infoBuf, degreeBuf, scaleBuf, nil, nil, nil, nil, phasorBus, delayBus, 
       60, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0.15, 0.015, Condition(true));
     ret.init;
     ^ret;
@@ -56,33 +56,18 @@ CyborgFugeVoice {
   
   root_ { |rr|
     root = rr;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\scaleRoot, rr);
-      }.play;
-    });
+    group.set(\scaleRoot, rr);
   }
   
   pitchLatency_ { |pl|
     pitchLatency = pl;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\pitchLatency, pl);
-      }.play;
-    });
+    group.set(\pitchLatency, pl);
   }
   
   setFormants { |ratio, track|
     formantRatio = ratio;
     formantRatioTrack = track;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\formantRatio, ratio, \formantRatioTrack, track);
-      }.play;
-    });    
+    group.set(\formantRatio, ratio, \formantRatioTrack, track);
   }
   
   delay_ { |d|
@@ -93,42 +78,22 @@ CyborgFugeVoice {
   
   amp_ { |a|
     amp = a;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\amp, a);
-      }.play;
-    });
+    group.set(\amp, a);
   }
   
   pan_ { |p|
     pan = p;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\pan, p);
-      }.play;
-    });
+    group.set(\pan, p);
   }
   
   degreeMult_ { |d|
     degreeMult = d;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\degreeMult, d);
-      }.play;
-    });
+    group.set(\degreeMult, d);
   }
   
   degreeAdd_ { |d|
     degreeAdd = d;
-    if (reader != nil, {
-      r {
-        condition.wait;
-        reader.set(\degreeAdd, d);
-      }.play;
-    });
+    group.set(\degreeAdd, d);
   }  
   
   replaceReader {
@@ -229,6 +194,7 @@ CyborgFugeVoice {
     phasorBus.free;
     outBus.free;
     delayBus.free;
+    group.free;
   }
 }
 
@@ -238,7 +204,7 @@ Engine_CyborgFugue : CroneEngine {
 	classvar luaOscPort = 10111;
 
   var pitchFinderSynth, infoBus, voiceInBus, backgroundBus, degreeBus, voices, pitchHandler, noteHandler, endOfChainSynth, scaleBuffer, beatDurBus;
-  var inL, inR, backL, backR, backPan, group;
+  var inL, inR, backL, backR, backPan, mainGroup;
   var condition;
   
 	*new { arg context, doneCallback;
@@ -536,11 +502,11 @@ Engine_CyborgFugue : CroneEngine {
 	  	  minFreq:82, 
 	  	  maxFreq:800]);
 	  	Server.default.sync;
-      group = Group.after(pitchFinderSynth);
-      voices = 4.collect({ |i| 
-        CyborgFugeVoice.new(i, group, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)
+      mainGroup = Group.after(pitchFinderSynth);
+      voices = 4.collect({ |i|
+        CyborgFugeVoice.new(i, mainGroup, voiceInBus, beatDurBus, infoBus, degreeBus, scaleBuffer)
       });
-      endOfChainSynth = Synth.after(group, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
+      endOfChainSynth = Synth.after(mainGroup, \endOfChain, [a: voices[0].outBus, b: voices[1].outBus, c: voices[2].outBus, d: voices[3].outBus]);
 	  	condition.test = true;
 	  	condition.signal;      
     //}).play;
@@ -559,6 +525,6 @@ Engine_CyborgFugue : CroneEngine {
     degreeBus.free;
     voiceInBus.free;
     beatDurBus.free;
-    group.free;
+    mainGroup.free;
   }
 }
