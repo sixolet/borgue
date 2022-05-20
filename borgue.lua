@@ -320,6 +320,7 @@ function add_voice_params(i)
     params:add_number("add "..i, "add", -28, 28, i*2)
     params:set_action("add "..i, function(add)
         engine.setDegreeAdd(i, add)
+        screen_dirty = true
     end) 
     params:add_binary("invert "..i, "invert", "toggle", 0)
     params:set_action("invert "..i, function(invert)
@@ -328,6 +329,7 @@ function add_voice_params(i)
       else
         engine.setDegreeMult(i, -1)
       end
+      screen_dirty = true
     end)
   end
   params:add_separator("again")
@@ -412,6 +414,7 @@ function amp_action(i)
   local amp = params:get("amp "..i)
   local at_all = 1 - params:get("mute "..i)
   engine.setAmp(i, amp*at_all)
+  screen_dirty = true
 end
 
 function sync_every_beat()
@@ -492,16 +495,19 @@ function recalculate_times(i)
   if r ~= last_actual_rate[i] then
     last_actual_rate[i] = r
     engine.setRate(i, r)
+    screen_dirty = true
   end
   local p = actual_period(i)
   if p ~= last_actual_period[i] then
     last_actual_period[i] = p
     engine.setPeriod(i, p)
+    screen_dirty = true
   end
   local d = actual_delay(i)
   if d ~= last_actual_delay[i] then
     last_actual_delay[i] = d
     engine.setDelay(i, d)
+    screen_dirty = true
   end  
 end
 

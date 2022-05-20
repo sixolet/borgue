@@ -484,15 +484,17 @@ Engine_CyborgFugue : CroneEngine {
       }).add;
       
       SynthDef(\recorder, { |infoBus, voiceInBus, degreeBus, beatDurBus, soundBuffer, infoBuffer, degreeBuffer, freeze=0, delay=4, phasorBus|
-        var phasor = Phasor.ar(0, 1, 0, BufFrames.kr(soundBuffer));
+        var frames = BufFrames.kr(soundBuffer);
+        var controlFrames = BufFrames.kr(degreeBuffer);
+        var phasor = Phasor.ar(0, 1, 0, frames);
         var controlPhasor = phasor*(ControlRate.ir/SampleRate.ir);
-        var doFeedback = freeze.lag(0.1);
+        var doFeedback = (freeze*(delay > 0)).lag(0.1);
         var beatDur = In.kr(beatDurBus);
         //Poll.kr(Impulse.kr(1), In.ar(voiceInBus), "sound production");
         
-        var feedbackSound = BufRd.ar(1, soundBuffer, phasor - (beatDur*SampleRate.ir*delay));
-        var feedbackDegree = BufRd.kr(1, degreeBuffer, controlPhasor - (beatDur*ControlRate.ir*delay));
-        var feedbackInfo = BufRd.kr(2, infoBuffer, controlPhasor - (beatDur*ControlRate.ir*delay));
+        var feedbackSound = BufRd.ar(1, soundBuffer, (phasor - (beatDur*SampleRate.ir*delay)).wrap(0, frames-1).sanitize);
+        var feedbackDegree = BufRd.kr(1, degreeBuffer, (controlPhasor - (beatDur*ControlRate.ir*delay)).wrap(0, controlFrames-1).sanitize);
+        var feedbackInfo = BufRd.kr(2, infoBuffer, (controlPhasor - (beatDur*ControlRate.ir*delay)).wrap(0, controlFrames-1).sanitize);
         
         var recordSound = doFeedback.if(feedbackSound, In.ar(voiceInBus, 1));
         var recordDegree = freeze.if(feedbackDegree, In.kr(degreeBus, 1));
