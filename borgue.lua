@@ -123,6 +123,9 @@ function describe_chan(i)
   if params:get("invert "..i) > 0 then 
     pitch = pitch .. " inv"
   end
+  if params:get("spread "..i) ~= 1 then
+    pitch = pitch .. string.format(" %.1f", params:get("spread "..i))
+  end
   screen.move(xx + 6, yy + 4)
   screen.text(pitch)
   screen.stroke()
@@ -217,6 +220,7 @@ end
 
 AMPSPEC = controlspec.AMP:copy()
 AMPSPEC.default = 0.5
+AMPSPEC.max = 2
 
 function init()
   osc.event = osc_in
@@ -292,7 +296,7 @@ end
 
 function add_voice_params(i)
   local group_name = "counterpoint "..i
-  local count = 25
+  local count = 26
   if i == 0 then
     group_name = "lead"
     count = 17
@@ -321,16 +325,11 @@ function add_voice_params(i)
     params:set_action("add "..i, function(add)
         engine.setDegreeAdd(i, add)
         screen_dirty = true
-    end) 
-    params:add_binary("invert "..i, "invert", "toggle", 0)
-    params:set_action("invert "..i, function(invert)
-      if invert == 0 then
-        engine.setDegreeMult(i, 1)
-      else
-        engine.setDegreeMult(i, -1)
-      end
-      screen_dirty = true
     end)
+    params:add_control("spread "..i, "spread", controlspec.new(0, 2, 'lin', 0, 1))
+    params:add_binary("invert "..i, "invert", "toggle", 0)
+    params:set_action("spread "..i, function() add_mult_action(i) end)
+    params:set_action("invert "..i, function() add_mult_action(i) end)
   end
   params:add_separator("again")
   params:add_control("repeat time "..i, "repeat time", controlspec.new(1/16, 2, 'lin', 0, 1, "beats", 1/31), function(param) return actual_repeat_time(i) end)
@@ -392,7 +391,15 @@ function add_voice_params(i)
   params:set_action("irregular "..i, function() grain_action(i) end)
   params:set_action("detune "..i, function() grain_action(i) end)
   
-  
+end
+
+function add_mult_action(i)
+    local inv = 1
+    if params:get("invert "..i) > 0 then
+        inv = -1
+    end
+    engine.setDegreeMult(i, inv*params:get("spread "..i))
+    screen_dirty = true
 end
 
 function grain_action(i)

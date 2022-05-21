@@ -491,8 +491,10 @@ Engine_CyborgFugue : CroneEngine {
         var doFeedback = (freeze*(delay > 0)).lag(0.1);
         var beatDur = In.kr(beatDurBus);
         //Poll.kr(Impulse.kr(1), In.ar(voiceInBus), "sound production");
-        
-        var feedbackSound = BufRd.ar(1, soundBuffer, (phasor - (beatDur*SampleRate.ir*delay)).wrap(0, frames-1).sanitize);
+        var which = ToggleFF.kr(Changed.kr(delay));
+        var delay0 = Latch.kr(delay, Impulse.kr(0) + (which <= 0));
+        var delay1 = Latch.kr(delay, which);
+        var feedbackSound = SelectX.ar(which.lag(0.05), BufRd.ar(1, soundBuffer, (phasor - (beatDur*SampleRate.ir*[delay0, delay1])).wrap(0, frames-1).sanitize));
         var feedbackDegree = BufRd.kr(1, degreeBuffer, (controlPhasor - (beatDur*ControlRate.ir*delay)).wrap(0, controlFrames-1).sanitize);
         var feedbackInfo = BufRd.kr(2, infoBuffer, (controlPhasor - (beatDur*ControlRate.ir*delay)).wrap(0, controlFrames-1).sanitize);
         
